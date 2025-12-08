@@ -41,3 +41,5 @@ coverage/
 
 # Optional: if you use Docker
 docker-data/
+
+/lib/generated/prisma
