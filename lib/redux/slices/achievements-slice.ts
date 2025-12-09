@@ -1,4 +1,4 @@
-import { createSlice, type PayloadAction } from "@reduxjs/toolkit"
+import { createSlice, createAsyncThunk, type PayloadAction } from "@reduxjs/toolkit"
 
 export interface Achievement {
   id: string
@@ -11,98 +11,78 @@ export interface Achievement {
   progress?: number
   maxProgress?: number
   reward: number
+  xpReward?: number
 }
 
 interface AchievementsState {
   achievements: Achievement[]
   totalUnlocked: number
+  isLoading: boolean
+  error: string | null
 }
 
-const initialAchievements: Achievement[] = [
-  {
-    id: "1",
-    title: "First Steps",
-    description: "Complete your first game",
-    icon: "🎮",
-    rarity: "common",
-    unlocked: true,
-    unlockedAt: "2024-01-15",
-    reward: 50,
-  },
-  {
-    id: "2",
-    title: "Token Collector",
-    description: "Earn 1000 LINE tokens",
-    icon: "💎",
-    rarity: "rare",
-    unlocked: true,
-    unlockedAt: "2024-01-18",
-    reward: 200,
-  },
-  {
-    id: "3",
-    title: "NFT Enthusiast",
-    description: "Own 5 NFTs",
-    icon: "🖼️",
-    rarity: "epic",
-    unlocked: false,
-    progress: 2,
-    maxProgress: 5,
-    reward: 500,
-  },
-  {
-    id: "4",
-    title: "Whale Status",
-    description: "Own 10,000 LINE tokens",
-    icon: "🐋",
-    rarity: "legendary",
-    unlocked: false,
-    progress: 2450,
-    maxProgress: 10000,
-    reward: 2000,
-  },
-  {
-    id: "5",
-    title: "Social Butterfly",
-    description: "Refer 10 friends",
-    icon: "🦋",
-    rarity: "epic",
-    unlocked: false,
-    progress: 3,
-    maxProgress: 10,
-    reward: 1000,
-  },
-  {
-    id: "6",
-    title: "Daily Warrior",
-    description: "Login 30 days in a row",
-    icon: "⚔️",
-    rarity: "rare",
-    unlocked: false,
-    progress: 7,
-    maxProgress: 30,
-    reward: 300,
-  },
-]
-
 const initialState: AchievementsState = {
-  achievements: initialAchievements,
-  totalUnlocked: initialAchievements.filter((a) => a.unlocked).length,
+  achievements: [],
+  totalUnlocked: 0,
+  isLoading: false,
+  error: null,
+}
+
+// Async thunk to fetch achievements from API
+export const fetchAchievements = createAsyncThunk(
+  "achievements/fetchAchievements",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await fetch("/api/achievements")
+      if (!response.ok) {
+        throw new Error("Failed to fetch achievements")
+      }
+      return await response.json()
+    } catch (error) {
+      return rejectWithValue((error as Error).message)
+    }
+  }
+)
+
+// Async thunk to unlock achievement
+export const unlockAchievementAsync = createAsyncThunk(
+  "achievements/unlock",
+  async (achievementId: string, { rejectWithValue }) => {
+    try {
+      const response = await fetch("/api/achievements", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ achievementId, action: "unlock" }),
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to unlock achievement")
+      }
+      return { achievementId, ...(await response.json()) }
+    } catch (error) {
+      return rejectWithValue((error as Error).message)
+    }
+  }
+)
+
+// Map rarity based on rewards
+function mapRarity(xpReward: number, tokenReward: number): Achievement["rarity"] {
+  const totalReward = xpReward + tokenReward
+  if (totalReward >= 1000) return "legendary"
+  if (totalReward >= 500) return "epic"
+  if (totalReward >= 200) return "rare"
+  return "common"
 }
 
 const achievementsSlice = createSlice({
   name: "achievements",
   initialState,
   reducers: {
-    unlockAchievement: (state, action: PayloadAction<string>) => {
-      const achievement = state.achievements.find((a) => a.id === action.payload)
-      if (achievement && !achievement.unlocked) {
-        achievement.unlocked = true
-        achievement.unlockedAt = new Date().toISOString()
-        state.totalUnlocked += 1
-      }
+    setAchievements: (state, action: PayloadAction<Achievement[]>) => {
+      state.achievements = action.payload
+      state.totalUnlocked = action.payload.filter((a) => a.unlocked).length
     },
-    updateProgress: (state, action: PayloadAction<{ id: string; progress: number }>) => {
+    updateLocalProgress: (state, action: PayloadAction<{ id: string; progress: number }>) => {
       const achievement = state.achievements.find((a) => a.id === action.payload.id)
       if (achievement && achievement.maxProgress) {
         achievement.progress = Math.min(action.payload.progress, achievement.maxProgress)
@@ -114,9 +94,56 @@ const achievementsSlice = createSlice({
       }
     },
   },
+  extraReducers: (builder) => {
+    builder
+      .addCase(fetchAchievements.pending, (state) => {
+        state.isLoading = true
+        state.error = null
+      })
+      .addCase(fetchAchievements.fulfilled, (state, action) => {
+        state.isLoading = false
+        // Map API response to Achievement interface
+        state.achievements = action.payload.achievements.map((a: {
+          id: string
+          name: string
+          description: string
+          icon: string
+          xpReward: number
+          tokenReward: number
+          unlocked: boolean
+          unlockedAt: string | null
+          progress?: { current: number; target: number }
+        }) => ({
+          id: a.id,
+          title: a.name,
+          description: a.description,
+          icon: a.icon || "🏆",
+          rarity: mapRarity(a.xpReward, a.tokenReward),
+          unlocked: a.unlocked,
+          unlockedAt: a.unlockedAt || undefined,
+          progress: a.progress?.current,
+          maxProgress: a.progress?.target,
+          reward: a.tokenReward,
+          xpReward: a.xpReward,
+        }))
+        state.totalUnlocked = action.payload.stats.unlocked
+      })
+      .addCase(fetchAchievements.rejected, (state, action) => {
+        state.isLoading = false
+        state.error = action.payload as string
+      })
+      .addCase(unlockAchievementAsync.fulfilled, (state, action) => {
+        const achievement = state.achievements.find((a) => a.id === action.payload.achievementId)
+        if (achievement && !achievement.unlocked) {
+          achievement.unlocked = true
+          achievement.unlockedAt = new Date().toISOString()
+          state.totalUnlocked += 1
+        }
+      })
+  },
 })
 
-export const { unlockAchievement, updateProgress } = achievementsSlice.actions
+export const { setAchievements, updateLocalProgress } = achievementsSlice.actions
 export default achievementsSlice.reducer
 
 // Selectors
@@ -126,3 +153,4 @@ export const selectUnlockedAchievements = (state: { achievements: AchievementsSt
 export const selectLockedAchievements = (state: { achievements: AchievementsState }) =>
   state.achievements.achievements.filter((a) => !a.unlocked)
 export const selectTotalUnlocked = (state: { achievements: AchievementsState }) => state.achievements.totalUnlocked
+export const selectAchievementsLoading = (state: { achievements: AchievementsState }) => state.achievements.isLoading

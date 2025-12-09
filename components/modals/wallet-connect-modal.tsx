@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button"
 import { useAppDispatch, useAppSelector } from "@/lib/redux/hooks"
 import { selectActiveModal, closeModal } from "@/lib/redux/slices/ui-slice"
 import {
-  connectWallet,
-  disconnectWallet,
+  connectWalletAsync,
+  disconnectWalletAsync,
   startConnecting,
   selectIsWalletConnected,
   selectWallet,
@@ -45,12 +45,12 @@ export function WalletConnectModal() {
         () => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"[Math.floor(Math.random() * 62)],
       ).join("")
 
-    dispatch(connectWallet({ address: mockAddress }))
+    dispatch(connectWalletAsync({ address: mockAddress, network: "vara-testnet" }))
     setSelectedWallet(null)
   }
 
   const handleDisconnect = () => {
-    dispatch(disconnectWallet())
+    dispatch(disconnectWalletAsync())
   }
 
   const handleClose = () => {

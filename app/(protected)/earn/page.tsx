@@ -21,8 +21,8 @@ import { NeonCard } from "@/components/ui/neon-card"
 import { NeonButton } from "@/components/ui/neon-button"
 import { useAppDispatch, useAppSelector } from "@/lib/redux/hooks"
 import {
-  claimDailyReward,
-  addTokens,
+  claimDailyRewardAsync,
+  fetchTokens,
   selectDailyClaimAvailable,
   selectTokenBalance,
   selectTotalEarned,
@@ -123,12 +123,21 @@ export default function EarnPage() {
 
   const handleClaimDaily = async () => {
     setClaimingDaily(true)
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    dispatch(claimDailyReward())
-    toast({
-      title: "Daily Reward Claimed!",
-      description: "You received 100 LINE tokens",
-    })
+    try {
+      await dispatch(claimDailyRewardAsync()).unwrap()
+      toast({
+        title: "Daily Reward Claimed!",
+        description: "You received your streak bonus!",
+      })
+      // Refresh tokens after claim
+      dispatch(fetchTokens())
+    } catch (error) {
+      toast({
+        title: "Failed to claim",
+        description: "Please try again later",
+        variant: "destructive",
+      })
+    }
     setClaimingDaily(false)
   }
 
@@ -145,15 +154,17 @@ export default function EarnPage() {
       await new Promise((resolve) => setTimeout(resolve, 1000))
     }
 
-    // Mark as completed and add tokens
+    // Mark as completed in local state
+    // TODO: Replace with API call when tasks API is integrated
     setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, completed: true } : t)))
-    dispatch(addTokens({ amount: task.reward, description: task.title, type: "earn" }))
 
     toast({
       title: "Task Completed!",
       description: `You earned ${task.reward} LINE tokens`,
     })
 
+    // Refresh token balance from API
+    dispatch(fetchTokens())
     setClaimingTaskId(null)
   }
 

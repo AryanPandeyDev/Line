@@ -1,73 +1,179 @@
 import { NextResponse } from "next/server"
-
-const mockNFTs = [
-  {
-    id: "nft_1",
-    name: "Cyber Phantom",
-    creator: "NeonArtist",
-    image: "/cyberpunk-phantom-warrior-neon-purple.jpg",
-    currentBid: 15.6,
-    timeLeft: "2d 10hrs 45min",
-    likes: 234,
-    rarity: "Legendary",
-    description: "A legendary phantom warrior from the neon-lit streets of Neo Tokyo.",
-  },
-  {
-    id: "nft_2",
-    name: "Digital Dragon",
-    creator: "CryptoMaster",
-    image: "/digital-dragon-creature-neon-scales.jpg",
-    currentBid: 8.2,
-    timeLeft: "1d 5hrs 20min",
-    likes: 189,
-    rarity: "Epic",
-    description: "A majestic digital dragon with scales that shimmer with blockchain energy.",
-  },
-  {
-    id: "nft_3",
-    name: "Neon Samurai",
-    creator: "ArtBlock79",
-    image: "/neon-samurai-warrior-cyberpunk-helmet.jpg",
-    currentBid: 66.4,
-    timeLeft: "4d 12hrs 8min",
-    likes: 567,
-    rarity: "Mythic",
-    description: "The rarest samurai in the collection, wielding a blade of pure light.",
-  },
-]
+import { auth } from "@clerk/nextjs/server"
+import { db } from "@/lib/db"
+import { getUserByClerkId, spendTokensFromUser } from "@/lib/db-helpers"
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url)
-  const category = searchParams.get("category")
-  const sortBy = searchParams.get("sortBy")
+  try {
+    const { searchParams } = new URL(request.url)
+    const category = searchParams.get("category")
+    const sortBy = searchParams.get("sortBy")
+    const rarity = searchParams.get("rarity")
 
-  const filteredNFTs = [...mockNFTs]
+    // Build where clause
+    const where: Record<string, unknown> = {}
+    if (rarity && rarity !== "all") {
+      where.rarity = rarity.toUpperCase()
+    }
 
-  if (sortBy === "price_high") {
-    filteredNFTs.sort((a, b) => b.currentBid - a.currentBid)
-  } else if (sortBy === "price_low") {
-    filteredNFTs.sort((a, b) => a.currentBid - b.currentBid)
+    // Build orderBy clause
+    let orderBy: Record<string, string>[] = [{ likes: "desc" }]
+    if (sortBy === "price_high") {
+      orderBy = [{ currentPrice: "desc" }]
+    } else if (sortBy === "price_low") {
+      orderBy = [{ currentPrice: "asc" }]
+    } else if (sortBy === "newest") {
+      orderBy = [{ createdAt: "desc" }]
+    }
+
+    const nfts = await db.nFT.findMany({
+      where,
+      orderBy,
+      include: {
+        listings: {
+          where: { status: "LISTED" },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+      },
+      take: 50,
+    })
+
+    // Format response to match frontend expectations
+    const formattedNFTs = nfts.map((nft) => {
+      const activeListing = nft.listings[0]
+      return {
+        id: nft.id,
+        name: nft.name,
+        creator: nft.creatorName,
+        image: nft.image,
+        currentBid: activeListing?.price || nft.currentPrice || 0,
+        timeLeft: activeListing?.expiresAt
+          ? formatTimeLeft(activeListing.expiresAt)
+          : "No active listing",
+        likes: nft.likes,
+        rarity: nft.rarity.charAt(0) + nft.rarity.slice(1).toLowerCase(),
+        description: nft.description,
+      }
+    })
+
+    return NextResponse.json(formattedNFTs)
+  } catch (error) {
+    console.error("Error fetching NFTs:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
-
-  return NextResponse.json(filteredNFTs)
 }
 
 export async function POST(request: Request) {
-  const { nftId, bidAmount } = await request.json()
+  try {
+    const { userId: clerkId } = await auth()
 
-  const nft = mockNFTs.find((n) => n.id === nftId)
-  if (!nft) {
-    return NextResponse.json({ error: "NFT not found" }, { status: 404 })
+    if (!clerkId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const user = await getUserByClerkId(clerkId)
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+
+    const { nftId, bidAmount, action } = await request.json()
+
+    if (action === "bid") {
+      const nft = await db.nFT.findUnique({
+        where: { id: nftId },
+        include: {
+          listings: {
+            where: { status: "LISTED" },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
+        },
+      })
+
+      if (!nft) {
+        return NextResponse.json({ error: "NFT not found" }, { status: 404 })
+      }
+
+      const activeListing = nft.listings[0]
+      if (!activeListing) {
+        return NextResponse.json({ error: "No active listing" }, { status: 400 })
+      }
+
+      const currentHighestBid = await db.nFTBid.findFirst({
+        where: { listingId: activeListing.id },
+        orderBy: { amount: "desc" },
+      })
+
+      const minBid = currentHighestBid?.amount || activeListing.price
+      if (bidAmount <= minBid) {
+        return NextResponse.json(
+          { error: `Bid must be higher than ${minBid}` },
+          { status: 400 }
+        )
+      }
+
+      // Create bid record
+      await db.nFTBid.create({
+        data: {
+          listingId: activeListing.id,
+          nftId: nft.id,
+          bidderId: user.id,
+          amount: bidAmount,
+          tokenType: "LINE",
+          isWinning: true,
+        },
+      })
+
+      // Mark previous winning bid as not winning
+      if (currentHighestBid) {
+        await db.nFTBid.update({
+          where: { id: currentHighestBid.id },
+          data: { isWinning: false },
+        })
+      }
+
+      // Update NFT current price
+      await db.nFT.update({
+        where: { id: nftId },
+        data: { currentPrice: bidAmount },
+      })
+
+      return NextResponse.json({
+        success: true,
+        message: `Bid of ${bidAmount} LINE placed successfully!`,
+        nftId,
+        newBid: bidAmount,
+      })
+    }
+
+    if (action === "like") {
+      await db.nFT.update({
+        where: { id: nftId },
+        data: { likes: { increment: 1 } },
+      })
+
+      return NextResponse.json({ success: true, message: "NFT liked!" })
+    }
+
+    return NextResponse.json({ error: "Invalid action" }, { status: 400 })
+  } catch (error) {
+    console.error("Error processing NFT action:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
+}
 
-  if (bidAmount <= nft.currentBid) {
-    return NextResponse.json({ error: "Bid must be higher than current bid" }, { status: 400 })
-  }
+function formatTimeLeft(expiresAt: Date): string {
+  const now = new Date()
+  const diff = expiresAt.getTime() - now.getTime()
 
-  return NextResponse.json({
-    success: true,
-    message: `Bid of ${bidAmount} ETH placed successfully!`,
-    nftId,
-    newBid: bidAmount,
-  })
+  if (diff <= 0) return "Expired"
+
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+
+  if (days > 0) return `${days}d ${hours}hrs ${minutes}min`
+  if (hours > 0) return `${hours}hrs ${minutes}min`
+  return `${minutes}min`
 }

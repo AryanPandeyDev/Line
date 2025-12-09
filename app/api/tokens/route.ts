@@ -1,34 +1,151 @@
 import { NextResponse } from "next/server"
-
-const mockTokenData = {
-  balance: 15420,
-  history: [
-    { type: "earn", amount: 500, source: "Daily Reward", timestamp: "2024-12-08T08:00:00Z" },
-    { type: "spend", amount: 1000, source: "NFT Purchase", timestamp: "2024-12-07T14:30:00Z" },
-    { type: "earn", amount: 1200, source: "Game Winnings", timestamp: "2024-12-06T20:15:00Z" },
-    { type: "earn", amount: 300, source: "Referral Bonus", timestamp: "2024-12-05T11:00:00Z" },
-  ],
-  dailyEarnings: {
-    today: 500,
-    thisWeek: 3200,
-    thisMonth: 12500,
-  },
-}
+import { auth } from "@clerk/nextjs/server"
+import { db } from "@/lib/db"
+import { getUserByClerkId, addTokensToUser, claimDailyStreak } from "@/lib/db-helpers"
 
 export async function GET() {
-  return NextResponse.json(mockTokenData)
+  try {
+    const { userId: clerkId } = await auth()
+
+    if (!clerkId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const user = await getUserByClerkId(clerkId)
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+
+    // Get token transactions
+    const transactions = await db.tokenTransaction.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    })
+
+    // Calculate daily earnings
+    const now = new Date()
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const startOfWeek = new Date(startOfToday)
+    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay())
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+
+    const [todayEarnings, weekEarnings, monthEarnings] = await Promise.all([
+      db.tokenTransaction.aggregate({
+        where: {
+          userId: user.id,
+          amount: { gt: 0 },
+          createdAt: { gte: startOfToday },
+        },
+        _sum: { amount: true },
+      }),
+      db.tokenTransaction.aggregate({
+        where: {
+          userId: user.id,
+          amount: { gt: 0 },
+          createdAt: { gte: startOfWeek },
+        },
+        _sum: { amount: true },
+      }),
+      db.tokenTransaction.aggregate({
+        where: {
+          userId: user.id,
+          amount: { gt: 0 },
+          createdAt: { gte: startOfMonth },
+        },
+        _sum: { amount: true },
+      }),
+    ])
+
+    // Check if daily claim is available
+    const streak = await db.dailyStreak.findUnique({
+      where: { userId: user.id },
+    })
+
+    const lastClaimDate = streak?.lastClaimDate
+    const canClaimToday = !lastClaimDate ||
+      new Date(lastClaimDate).toDateString() !== now.toDateString()
+
+    // Format response
+    return NextResponse.json({
+      balance: user.tokenBalance,
+      history: transactions.map((t) => ({
+        type: t.type.toLowerCase().replace("_", "-"),
+        amount: t.amount,
+        source: t.source,
+        timestamp: t.createdAt.toISOString(),
+      })),
+      dailyEarnings: {
+        today: todayEarnings._sum.amount || 0,
+        thisWeek: weekEarnings._sum.amount || 0,
+        thisMonth: monthEarnings._sum.amount || 0,
+      },
+      dailyClaimAvailable: canClaimToday,
+    })
+  } catch (error) {
+    console.error("Error fetching tokens:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
 }
 
 export async function POST(request: Request) {
-  const { action, amount } = await request.json()
+  try {
+    const { userId: clerkId } = await auth()
 
-  if (action === "claim") {
-    return NextResponse.json({
-      success: true,
-      newBalance: mockTokenData.balance + amount,
-      message: `Successfully claimed ${amount} LGC tokens!`,
-    })
+    if (!clerkId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const user = await getUserByClerkId(clerkId)
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+
+    const { action, amount } = await request.json()
+
+    if (action === "claim") {
+      // This is for claiming daily streak reward
+      try {
+        const result = await claimDailyStreak(user.id)
+
+        const updatedUser = await db.user.findUnique({
+          where: { id: user.id },
+          select: { tokenBalance: true },
+        })
+
+        return NextResponse.json({
+          success: true,
+          newBalance: updatedUser?.tokenBalance || 0,
+          message: `Successfully claimed Day ${result.day} streak bonus: ${result.reward} LINE tokens!`,
+          currentStreak: result.currentStreak,
+        })
+      } catch (error) {
+        return NextResponse.json(
+          { error: "Failed to claim daily reward" },
+          { status: 400 }
+        )
+      }
+    }
+
+    if (action === "add" && amount && typeof amount === "number") {
+      // Admin action to add tokens (should be protected in production)
+      await addTokensToUser(user.id, amount, "Manual Addition", "EARN")
+
+      const updatedUser = await db.user.findUnique({
+        where: { id: user.id },
+        select: { tokenBalance: true },
+      })
+
+      return NextResponse.json({
+        success: true,
+        newBalance: updatedUser?.tokenBalance || 0,
+        message: `Successfully added ${amount} LINE tokens!`,
+      })
+    }
+
+    return NextResponse.json({ error: "Invalid action" }, { status: 400 })
+  } catch (error) {
+    console.error("Error processing token action:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
-
-  return NextResponse.json({ error: "Invalid action" }, { status: 400 })
 }

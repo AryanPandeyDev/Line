@@ -1,4 +1,4 @@
-import { createSlice, type PayloadAction } from "@reduxjs/toolkit"
+import { createSlice, createAsyncThunk, type PayloadAction } from "@reduxjs/toolkit"
 
 type NetworkType = "vara-mainnet" | "vara-testnet" | "unknown"
 
@@ -24,6 +24,7 @@ interface WalletState {
   nftCount: number
   transactions: WalletTransaction[]
   error: string | null
+  isLoading: boolean
 }
 
 const initialState: WalletState = {
@@ -37,7 +38,65 @@ const initialState: WalletState = {
   nftCount: 0,
   transactions: [],
   error: null,
+  isLoading: false,
 }
+
+// Async thunk to fetch wallet from API
+export const fetchWallet = createAsyncThunk(
+  "wallet/fetchWallet",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await fetch("/api/wallet")
+      if (!response.ok) {
+        throw new Error("Failed to fetch wallet")
+      }
+      return await response.json()
+    } catch (error) {
+      return rejectWithValue((error as Error).message)
+    }
+  }
+)
+
+// Async thunk to connect wallet
+export const connectWalletAsync = createAsyncThunk(
+  "wallet/connect",
+  async ({ address, network }: { address: string; network?: string }, { rejectWithValue }) => {
+    try {
+      const response = await fetch("/api/wallet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "connect", address, network }),
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to connect wallet")
+      }
+      return await response.json()
+    } catch (error) {
+      return rejectWithValue((error as Error).message)
+    }
+  }
+)
+
+// Async thunk to disconnect wallet
+export const disconnectWalletAsync = createAsyncThunk(
+  "wallet/disconnect",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await fetch("/api/wallet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "disconnect" }),
+      })
+      if (!response.ok) {
+        throw new Error("Failed to disconnect wallet")
+      }
+      return await response.json()
+    } catch (error) {
+      return rejectWithValue((error as Error).message)
+    }
+  }
+)
 
 const walletSlice = createSlice({
   name: "wallet",
@@ -47,42 +106,11 @@ const walletSlice = createSlice({
       state.isConnecting = true
       state.error = null
     },
-    connectWallet: (state, action: PayloadAction<{ address: string }>) => {
-      const addr = action.payload.address
-      state.isConnected = true
+    setError: (state, action: PayloadAction<string | null>) => {
+      state.error = action.payload
       state.isConnecting = false
-      state.address = addr
-      state.shortAddress = `${addr.slice(0, 6)}...${addr.slice(-4)}`
-      state.network = "vara-testnet"
-      // Mock balances
-      state.varaBalance = 125.5
-      state.lineBalance = 2450
-      state.nftCount = 2
-      state.transactions = [
-        {
-          id: "1",
-          type: "receive",
-          amount: 100,
-          token: "VARA",
-          from: "0x1234...5678",
-          to: addr,
-          timestamp: new Date().toISOString(),
-          status: "confirmed",
-        },
-        {
-          id: "2",
-          type: "nft-purchase",
-          amount: 1200,
-          token: "LINE",
-          from: addr,
-          to: "LINE Marketplace",
-          timestamp: new Date(Date.now() - 86400000).toISOString(),
-          status: "confirmed",
-        },
-      ]
-      state.error = null
     },
-    disconnectWallet: (state) => {
+    clearWallet: (state) => {
       state.isConnected = false
       state.isConnecting = false
       state.address = null
@@ -93,36 +121,61 @@ const walletSlice = createSlice({
       state.nftCount = 0
       state.transactions = []
     },
-    setNetwork: (state, action: PayloadAction<NetworkType>) => {
-      state.network = action.payload
-    },
-    updateBalances: (state, action: PayloadAction<{ vara?: number; line?: number }>) => {
-      if (action.payload.vara !== undefined) state.varaBalance = action.payload.vara
-      if (action.payload.line !== undefined) state.lineBalance = action.payload.line
-    },
-    setError: (state, action: PayloadAction<string | null>) => {
-      state.error = action.payload
-      state.isConnecting = false
-    },
-    addTransaction: (state, action: PayloadAction<Omit<WalletTransaction, "id">>) => {
-      state.transactions.unshift({
-        ...action.payload,
-        id: crypto.randomUUID(),
+  },
+  extraReducers: (builder) => {
+    builder
+      // Fetch wallet
+      .addCase(fetchWallet.pending, (state) => {
+        state.isLoading = true
       })
-    },
+      .addCase(fetchWallet.fulfilled, (state, action) => {
+        state.isLoading = false
+        state.isConnected = action.payload.isConnected
+        state.address = action.payload.address
+        state.shortAddress = action.payload.shortAddress
+        state.network = action.payload.network as NetworkType
+        state.varaBalance = action.payload.varaBalance
+        state.lineBalance = action.payload.lineBalance
+        state.nftCount = action.payload.nftCount
+        state.transactions = action.payload.transactions || []
+      })
+      .addCase(fetchWallet.rejected, (state, action) => {
+        state.isLoading = false
+        state.error = action.payload as string
+      })
+      // Connect wallet
+      .addCase(connectWalletAsync.pending, (state) => {
+        state.isConnecting = true
+        state.error = null
+      })
+      .addCase(connectWalletAsync.fulfilled, (state, action) => {
+        state.isConnecting = false
+        state.isConnected = true
+        state.address = action.payload.wallet.address
+        state.shortAddress = action.payload.wallet.shortAddress
+        state.network = action.payload.wallet.network as NetworkType
+        state.varaBalance = action.payload.wallet.varaBalance
+        state.lineBalance = action.payload.wallet.lineBalance
+      })
+      .addCase(connectWalletAsync.rejected, (state, action) => {
+        state.isConnecting = false
+        state.error = action.payload as string
+      })
+      // Disconnect wallet
+      .addCase(disconnectWalletAsync.fulfilled, (state) => {
+        state.isConnected = false
+        state.address = null
+        state.shortAddress = null
+        state.network = "unknown"
+        state.varaBalance = 0
+        state.lineBalance = 0
+        state.nftCount = 0
+        state.transactions = []
+      })
   },
 })
 
-export const {
-  startConnecting,
-  connectWallet,
-  disconnectWallet,
-  setNetwork,
-  updateBalances,
-  setError,
-  addTransaction,
-} = walletSlice.actions
-
+export const { startConnecting, setError, clearWallet } = walletSlice.actions
 export default walletSlice.reducer
 
 // Selectors
@@ -136,3 +189,4 @@ export const selectWalletBalances = (state: { wallet: WalletState }) => ({
   line: state.wallet.lineBalance,
 })
 export const selectWalletTransactions = (state: { wallet: WalletState }) => state.wallet.transactions
+export const selectWalletLoading = (state: { wallet: WalletState }) => state.wallet.isLoading

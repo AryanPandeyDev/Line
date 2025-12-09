@@ -1,41 +1,46 @@
 import { NextResponse } from "next/server"
-
-const mockGames = [
-  {
-    id: "game_1",
-    name: "Neon Racers",
-    description: "High-speed racing through neon-lit cyberpunk cities",
-    image: "/cyberpunk-racing-game-neon.jpg",
-    category: "Racing",
-    players: 15420,
-    rewards: { min: 50, max: 500 },
-    status: "coming_soon",
-    releaseDate: "2025-01-15",
-  },
-  {
-    id: "game_2",
-    name: "Battle Royale X",
-    description: "Last player standing wins in this intense battle arena",
-    image: "/battle-royale-cyberpunk-arena.jpg",
-    category: "Action",
-    players: 28900,
-    rewards: { min: 100, max: 1000 },
-    status: "coming_soon",
-    releaseDate: "2025-02-01",
-  },
-  {
-    id: "game_3",
-    name: "Cosmic Explorers",
-    description: "Explore the galaxy and discover rare NFT planets",
-    image: "/space-exploration-game-neon.jpg",
-    category: "Adventure",
-    players: 8750,
-    rewards: { min: 25, max: 250 },
-    status: "coming_soon",
-    releaseDate: "2025-02-15",
-  },
-]
+import { db } from "@/lib/db"
 
 export async function GET() {
-  return NextResponse.json(mockGames)
+  try {
+    const games = await db.game.findMany({
+      orderBy: [
+        { status: "asc" }, // Active games first
+        { playerCount: "desc" },
+      ],
+      select: {
+        id: true,
+        slug: true,
+        name: true,
+        description: true,
+        coverImage: true,
+        category: true,
+        playerCount: true,
+        rating: true,
+        rewardMin: true,
+        rewardMax: true,
+        status: true,
+        releaseDate: true,
+      },
+    })
+
+    // Format response to match frontend expectations
+    const formattedGames = games.map((game) => ({
+      id: game.id,
+      name: game.name,
+      description: game.description,
+      image: game.coverImage,
+      category: game.category.charAt(0) + game.category.slice(1).toLowerCase(),
+      players: game.playerCount,
+      rating: game.rating,
+      rewards: { min: game.rewardMin, max: game.rewardMax },
+      status: game.status.toLowerCase().replace("_", "-"),
+      releaseDate: game.releaseDate?.toISOString().split("T")[0] || null,
+    }))
+
+    return NextResponse.json(formattedGames)
+  } catch (error) {
+    console.error("Error fetching games:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
 }

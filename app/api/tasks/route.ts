@@ -1,65 +1,244 @@
 import { NextResponse } from "next/server"
-
-const mockTasks = {
-  daily: [
-    { id: "daily_1", name: "Log in daily", reward: 50, completed: true },
-    { id: "daily_2", name: "Play 3 games", reward: 100, progress: { current: 0, target: 3 }, completed: false },
-    { id: "daily_3", name: "Win 1 game", reward: 150, progress: { current: 0, target: 1 }, completed: false },
-    { id: "daily_4", name: "Trade in marketplace", reward: 75, completed: false },
-  ],
-  external: [
-    { id: "ext_1", name: "Follow on Twitter", reward: 200, completed: true, link: "https://twitter.com" },
-    { id: "ext_2", name: "Join Discord", reward: 200, completed: false, link: "https://discord.com" },
-    { id: "ext_3", name: "Subscribe to YouTube", reward: 150, completed: false, link: "https://youtube.com" },
-    { id: "ext_4", name: "Join Telegram", reward: 100, completed: false, link: "https://telegram.org" },
-  ],
-  achievements: [
-    { id: "ach_1", name: "First Win", reward: 500, completed: true },
-    { id: "ach_2", name: "100 Games Played", reward: 1000, completed: true },
-    {
-      id: "ach_3",
-      name: "NFT Collector (5 NFTs)",
-      reward: 2000,
-      progress: { current: 2, target: 5 },
-      completed: false,
-    },
-  ],
-  streak: {
-    current: 7,
-    rewards: [
-      { day: 1, reward: 50, claimed: true },
-      { day: 2, reward: 75, claimed: true },
-      { day: 3, reward: 100, claimed: true },
-      { day: 4, reward: 125, claimed: true },
-      { day: 5, reward: 150, claimed: true },
-      { day: 6, reward: 200, claimed: true },
-      { day: 7, reward: 300, claimed: false },
-    ],
-  },
-}
+import { auth } from "@clerk/nextjs/server"
+import { db } from "@/lib/db"
+import { getUserByClerkId, addTokensToUser, addXPToUser } from "@/lib/db-helpers"
 
 export async function GET() {
-  return NextResponse.json(mockTasks)
+  try {
+    const { userId: clerkId } = await auth()
+
+    if (!clerkId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const user = await getUserByClerkId(clerkId)
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+
+    // Get all tasks with user progress
+    const [allTasks, userTasks, streak] = await Promise.all([
+      db.task.findMany({
+        where: { isActive: true },
+        orderBy: [{ type: "asc" }, { createdAt: "asc" }],
+      }),
+      db.userTask.findMany({
+        where: { userId: user.id },
+        include: { task: true },
+      }),
+      db.dailyStreak.findUnique({
+        where: { userId: user.id },
+      }),
+    ])
+
+    // Get streak rewards config
+    const streakRewards = await db.streakReward.findMany({
+      orderBy: { day: "asc" },
+    })
+
+    // Map user task progress
+    const userTaskMap = new Map(userTasks.map((ut) => [ut.taskId, ut]))
+
+    // Format tasks by type
+    const daily = allTasks
+      .filter((t) => t.type === "DAILY")
+      .map((t) => {
+        const userTask = userTaskMap.get(t.id)
+        return {
+          id: t.id,
+          name: t.name,
+          reward: t.reward,
+          completed: userTask?.status === "COMPLETED" || userTask?.status === "CLAIMED",
+          progress: userTask ? { current: userTask.progress, target: t.targetProgress } : undefined,
+        }
+      })
+
+    const external = allTasks
+      .filter((t) => t.type === "EXTERNAL")
+      .map((t) => {
+        const userTask = userTaskMap.get(t.id)
+        return {
+          id: t.id,
+          name: t.name,
+          reward: t.reward,
+          completed: userTask?.status === "COMPLETED" || userTask?.status === "CLAIMED",
+          link: t.externalUrl,
+        }
+      })
+
+    const achievements = allTasks
+      .filter((t) => t.type === "ACHIEVEMENT")
+      .map((t) => {
+        const userTask = userTaskMap.get(t.id)
+        return {
+          id: t.id,
+          name: t.name,
+          reward: t.reward,
+          completed: userTask?.status === "COMPLETED" || userTask?.status === "CLAIMED",
+          progress: t.targetProgress > 1
+            ? { current: userTask?.progress || 0, target: t.targetProgress }
+            : undefined,
+        }
+      })
+
+    // Format streak data
+    const currentStreak = streak?.currentStreak || 0
+    const claimedDays = streak?.claimedDays || []
+
+    const streakData = {
+      current: currentStreak,
+      rewards: streakRewards.length > 0
+        ? streakRewards.map((sr) => ({
+          day: sr.day,
+          reward: sr.reward,
+          claimed: claimedDays.includes(sr.day),
+        }))
+        : [
+          { day: 1, reward: 50, claimed: claimedDays.includes(1) },
+          { day: 2, reward: 75, claimed: claimedDays.includes(2) },
+          { day: 3, reward: 100, claimed: claimedDays.includes(3) },
+          { day: 4, reward: 125, claimed: claimedDays.includes(4) },
+          { day: 5, reward: 150, claimed: claimedDays.includes(5) },
+          { day: 6, reward: 200, claimed: claimedDays.includes(6) },
+          { day: 7, reward: 300, claimed: claimedDays.includes(7) },
+        ],
+    }
+
+    return NextResponse.json({
+      daily,
+      external,
+      achievements,
+      streak: streakData,
+    })
+  } catch (error) {
+    console.error("Error fetching tasks:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
 }
 
 export async function POST(request: Request) {
-  const { taskId, action } = await request.json()
+  try {
+    const { userId: clerkId } = await auth()
 
-  if (action === "complete") {
-    return NextResponse.json({
-      success: true,
-      message: "Task completed!",
-      taskId,
+    if (!clerkId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const user = await getUserByClerkId(clerkId)
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+
+    const { taskId, action } = await request.json()
+
+    const task = await db.task.findUnique({ where: { id: taskId } })
+    if (!task) {
+      return NextResponse.json({ error: "Task not found" }, { status: 404 })
+    }
+
+    // Get or create user task
+    let userTask = await db.userTask.findFirst({
+      where: { userId: user.id, taskId },
     })
-  }
 
-  if (action === "claim") {
-    return NextResponse.json({
-      success: true,
-      message: "Reward claimed!",
-      taskId,
-    })
-  }
+    if (action === "complete") {
+      if (!userTask) {
+        userTask = await db.userTask.create({
+          data: {
+            userId: user.id,
+            taskId,
+            status: "COMPLETED",
+            progress: task.targetProgress,
+            completedAt: new Date(),
+          },
+        })
+      } else if (userTask.status === "ACTIVE") {
+        userTask = await db.userTask.update({
+          where: { id: userTask.id },
+          data: {
+            status: "COMPLETED",
+            progress: task.targetProgress,
+            completedAt: new Date(),
+          },
+        })
+      }
 
-  return NextResponse.json({ error: "Invalid action" }, { status: 400 })
+      return NextResponse.json({
+        success: true,
+        message: "Task completed!",
+        taskId,
+      })
+    }
+
+    if (action === "claim") {
+      if (!userTask || userTask.status !== "COMPLETED") {
+        return NextResponse.json(
+          { error: "Task must be completed before claiming" },
+          { status: 400 }
+        )
+      }
+
+      // Update task status
+      await db.userTask.update({
+        where: { id: userTask.id },
+        data: {
+          status: "CLAIMED",
+          claimedAt: new Date(),
+        },
+      })
+
+      // Add rewards
+      await addTokensToUser(user.id, task.reward, `Task: ${task.name}`, "EARN")
+      if (task.xpReward > 0) {
+        await addXPToUser(user.id, task.xpReward)
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Claimed ${task.reward} LINE tokens!`,
+        taskId,
+        reward: task.reward,
+      })
+    }
+
+    if (action === "progress") {
+      const { amount = 1 } = await request.json()
+
+      if (!userTask) {
+        userTask = await db.userTask.create({
+          data: {
+            userId: user.id,
+            taskId,
+            status: "ACTIVE",
+            progress: Math.min(amount, task.targetProgress),
+          },
+        })
+      } else {
+        const newProgress = Math.min(userTask.progress + amount, task.targetProgress)
+        const isComplete = newProgress >= task.targetProgress
+
+        userTask = await db.userTask.update({
+          where: { id: userTask.id },
+          data: {
+            progress: newProgress,
+            status: isComplete ? "COMPLETED" : "ACTIVE",
+            completedAt: isComplete ? new Date() : null,
+          },
+        })
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "Progress updated!",
+        taskId,
+        progress: userTask.progress,
+        target: task.targetProgress,
+      })
+    }
+
+    return NextResponse.json({ error: "Invalid action" }, { status: 400 })
+  } catch (error) {
+    console.error("Error processing task action:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
 }

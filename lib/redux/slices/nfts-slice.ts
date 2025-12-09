@@ -1,6 +1,6 @@
-import { createSlice, type PayloadAction } from "@reduxjs/toolkit"
+import { createSlice, createAsyncThunk, type PayloadAction } from "@reduxjs/toolkit"
 
-export type NFTRarity = "Common" | "Rare" | "Epic" | "Legendary"
+export type NFTRarity = "Common" | "Rare" | "Epic" | "Legendary" | "Mythic"
 
 export interface NFTAttribute {
   trait: string
@@ -16,8 +16,11 @@ export interface NFT {
   description: string
   attributes: NFTAttribute[]
   owner: string
+  creator: string
   listed: boolean
   createdAt: string
+  likes: number
+  timeLeft?: string
 }
 
 interface NFTsState {
@@ -29,149 +32,170 @@ interface NFTsState {
     sortBy: "price-asc" | "price-desc" | "rarity" | "newest"
     search: string
   }
+  isLoading: boolean
+  error: string | null
 }
 
-const mockNFTs: NFT[] = [
-  {
-    id: "nft-001",
-    name: "Cyber Wolf",
-    rarity: "Epic",
-    price: 1200,
-    image: "/cyberpunk-wolf-with-neon-blue-eyes-and-chrome-armo.jpg",
-    description: "A fierce cyber wolf with glowing neon circuits running through its chrome body.",
-    attributes: [
-      { trait: "Power", value: 72 },
-      { trait: "Luck", value: 40 },
-      { trait: "Background", value: "Neon Grid" },
-    ],
-    owner: "LINE Marketplace",
-    listed: true,
-    createdAt: "2024-01-01",
-  },
-  {
-    id: "nft-002",
-    name: "Neon Samurai",
-    rarity: "Legendary",
-    price: 5000,
-    image: "/neon-samurai-warrior-with-glowing-katana-cyberpunk.jpg",
-    description: "An ancient warrior reborn in the digital age, wielding a blade of pure light.",
-    attributes: [
-      { trait: "Power", value: 95 },
-      { trait: "Honor", value: 88 },
-      { trait: "Background", value: "Cherry Blossom Matrix" },
-    ],
-    owner: "LINE Marketplace",
-    listed: true,
-    createdAt: "2024-01-05",
-  },
-  {
-    id: "nft-003",
-    name: "Holo Mask",
-    rarity: "Rare",
-    price: 450,
-    image: "/holographic-cyber-mask-with-shifting-colors-futuri.jpg",
-    description: "A mysterious holographic mask that shifts between dimensions.",
-    attributes: [
-      { trait: "Mystery", value: 65 },
-      { trait: "Stealth", value: 78 },
-      { trait: "Background", value: "Void Space" },
-    ],
-    owner: "LINE Marketplace",
-    listed: true,
-    createdAt: "2024-01-08",
-  },
-  {
-    id: "nft-004",
-    name: "Chrome Dragon",
-    rarity: "Legendary",
-    price: 8500,
-    image: "/chrome-mechanical-dragon-with-glowing-purple-eyes-.jpg",
-    description: "A majestic dragon forged from pure chrome, breathing digital fire.",
-    attributes: [
-      { trait: "Power", value: 99 },
-      { trait: "Wisdom", value: 85 },
-      { trait: "Background", value: "Storm Clouds" },
-    ],
-    owner: "LINE Marketplace",
-    listed: true,
-    createdAt: "2024-01-10",
-  },
-  {
-    id: "nft-005",
-    name: "Void Fox",
-    rarity: "Epic",
-    price: 1800,
-    image: "/ethereal-fox-made-of-dark-matter-with-magenta-ener.jpg",
-    description: "A mystical fox that exists between dimensions, trailing cosmic energy.",
-    attributes: [
-      { trait: "Speed", value: 88 },
-      { trait: "Cunning", value: 76 },
-      { trait: "Background", value: "Dark Nebula" },
-    ],
-    owner: "LINE Marketplace",
-    listed: true,
-    createdAt: "2024-01-12",
-  },
-  {
-    id: "nft-006",
-    name: "Synth Ranger",
-    rarity: "Common",
-    price: 120,
-    image: "/synthwave-ranger-with-visor-and-cyber-bow-neon-col.jpg",
-    description: "A lone ranger of the digital frontier, armed with a bow of pure energy.",
-    attributes: [
-      { trait: "Accuracy", value: 82 },
-      { trait: "Survival", value: 60 },
-      { trait: "Background", value: "Sunset Grid" },
-    ],
-    owner: "LINE Marketplace",
-    listed: true,
-    createdAt: "2024-01-15",
-  },
-]
-
 const initialState: NFTsState = {
-  marketplace: mockNFTs,
+  marketplace: [],
   inventory: [],
-  featured: mockNFTs[1], // Neon Samurai as featured
+  featured: null,
   filters: {
     rarity: "all",
     sortBy: "newest",
     search: "",
   },
+  isLoading: false,
+  error: null,
+}
+
+// Async thunk to fetch marketplace NFTs
+export const fetchMarketplaceNFTs = createAsyncThunk(
+  "nfts/fetchMarketplace",
+  async (params: { sortBy?: string; rarity?: string } = {}, { rejectWithValue }) => {
+    try {
+      const searchParams = new URLSearchParams()
+      if (params.sortBy) searchParams.set("sortBy", params.sortBy)
+      if (params.rarity) searchParams.set("rarity", params.rarity)
+
+      const response = await fetch(`/api/nfts?${searchParams}`)
+      if (!response.ok) {
+        throw new Error("Failed to fetch NFTs")
+      }
+      return await response.json()
+    } catch (error) {
+      return rejectWithValue((error as Error).message)
+    }
+  }
+)
+
+// Async thunk to place a bid
+export const placeBidAsync = createAsyncThunk(
+  "nfts/placeBid",
+  async ({ nftId, bidAmount }: { nftId: string; bidAmount: number }, { rejectWithValue }) => {
+    try {
+      const response = await fetch("/api/nfts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nftId, bidAmount, action: "bid" }),
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to place bid")
+      }
+      return { nftId, bidAmount, ...(await response.json()) }
+    } catch (error) {
+      return rejectWithValue((error as Error).message)
+    }
+  }
+)
+
+// Async thunk to like an NFT
+export const likeNFTAsync = createAsyncThunk(
+  "nfts/like",
+  async (nftId: string, { rejectWithValue }) => {
+    try {
+      const response = await fetch("/api/nfts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nftId, action: "like" }),
+      })
+      if (!response.ok) {
+        throw new Error("Failed to like NFT")
+      }
+      return { nftId }
+    } catch (error) {
+      return rejectWithValue((error as Error).message)
+    }
+  }
+)
+
+// Map API rarity to state rarity
+function mapRarity(rarity: string): NFTRarity {
+  const map: Record<string, NFTRarity> = {
+    Common: "Common",
+    Rare: "Rare",
+    Epic: "Epic",
+    Legendary: "Legendary",
+    Mythic: "Mythic",
+  }
+  return map[rarity] || "Common"
 }
 
 const nftsSlice = createSlice({
   name: "nfts",
   initialState,
   reducers: {
-    purchaseNFT: (state, action: PayloadAction<{ nftId: string; buyerAddress: string }>) => {
-      const nft = state.marketplace.find((n) => n.id === action.payload.nftId)
-      if (nft) {
-        nft.owner = action.payload.buyerAddress
-        nft.listed = false
-        state.inventory.push({ ...nft })
-        state.marketplace = state.marketplace.filter((n) => n.id !== action.payload.nftId)
-      }
-    },
-    listNFT: (state, action: PayloadAction<{ nftId: string; price: number }>) => {
-      const nft = state.inventory.find((n) => n.id === action.payload.nftId)
-      if (nft) {
-        nft.price = action.payload.price
-        nft.listed = true
-        state.marketplace.push({ ...nft })
-      }
-    },
     setFilters: (state, action: PayloadAction<Partial<NFTsState["filters"]>>) => {
       state.filters = { ...state.filters, ...action.payload }
     },
     resetFilters: (state) => {
       state.filters = { rarity: "all", sortBy: "newest", search: "" }
     },
+    setInventory: (state, action: PayloadAction<NFT[]>) => {
+      state.inventory = action.payload
+    },
+    addToInventory: (state, action: PayloadAction<NFT>) => {
+      state.inventory.push(action.payload)
+    },
+  },
+  extraReducers: (builder) => {
+    builder
+      .addCase(fetchMarketplaceNFTs.pending, (state) => {
+        state.isLoading = true
+        state.error = null
+      })
+      .addCase(fetchMarketplaceNFTs.fulfilled, (state, action) => {
+        state.isLoading = false
+        // Map API response to NFT interface
+        state.marketplace = action.payload.map((nft: {
+          id: string
+          name: string
+          creator: string
+          image: string
+          currentBid: number
+          timeLeft: string
+          likes: number
+          rarity: string
+          description?: string
+        }) => ({
+          id: nft.id,
+          name: nft.name,
+          rarity: mapRarity(nft.rarity),
+          price: nft.currentBid,
+          image: nft.image,
+          description: nft.description || "",
+          attributes: [],
+          owner: "LINE Marketplace",
+          creator: nft.creator,
+          listed: true,
+          createdAt: new Date().toISOString(),
+          likes: nft.likes,
+          timeLeft: nft.timeLeft,
+        }))
+        // Set first legendary as featured
+        state.featured = state.marketplace.find((n) => n.rarity === "Legendary" || n.rarity === "Mythic") || state.marketplace[0] || null
+      })
+      .addCase(fetchMarketplaceNFTs.rejected, (state, action) => {
+        state.isLoading = false
+        state.error = action.payload as string
+      })
+      .addCase(placeBidAsync.fulfilled, (state, action) => {
+        const nft = state.marketplace.find((n) => n.id === action.payload.nftId)
+        if (nft) {
+          nft.price = action.payload.bidAmount
+        }
+      })
+      .addCase(likeNFTAsync.fulfilled, (state, action) => {
+        const nft = state.marketplace.find((n) => n.id === action.payload.nftId)
+        if (nft) {
+          nft.likes += 1
+        }
+      })
   },
 })
 
-export const { purchaseNFT, listNFT, setFilters, resetFilters } = nftsSlice.actions
+export const { setFilters, resetFilters, setInventory, addToInventory } = nftsSlice.actions
 export default nftsSlice.reducer
 
 // Selectors
@@ -179,6 +203,7 @@ export const selectMarketplace = (state: { nfts: NFTsState }) => state.nfts.mark
 export const selectInventory = (state: { nfts: NFTsState }) => state.nfts.inventory
 export const selectFeatured = (state: { nfts: NFTsState }) => state.nfts.featured
 export const selectFilters = (state: { nfts: NFTsState }) => state.nfts.filters
+export const selectNFTsLoading = (state: { nfts: NFTsState }) => state.nfts.isLoading
 export const selectFilteredMarketplace = (state: { nfts: NFTsState }) => {
   let items = [...state.nfts.marketplace]
   const { rarity, sortBy, search } = state.nfts.filters
@@ -193,7 +218,7 @@ export const selectFilteredMarketplace = (state: { nfts: NFTsState }) => {
     items = items.filter(
       (nft) =>
         nft.name.toLowerCase().includes(search.toLowerCase()) ||
-        nft.description.toLowerCase().includes(search.toLowerCase()),
+        nft.description.toLowerCase().includes(search.toLowerCase())
     )
   }
 
@@ -206,7 +231,7 @@ export const selectFilteredMarketplace = (state: { nfts: NFTsState }) => {
       items.sort((a, b) => b.price - a.price)
       break
     case "rarity":
-      const rarityOrder = { Legendary: 0, Epic: 1, Rare: 2, Common: 3 }
+      const rarityOrder: Record<NFTRarity, number> = { Mythic: 0, Legendary: 1, Epic: 2, Rare: 3, Common: 4 }
       items.sort((a, b) => rarityOrder[a.rarity] - rarityOrder[b.rarity])
       break
     case "newest":
