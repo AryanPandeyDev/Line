@@ -39,47 +39,40 @@ export async function GET() {
     // Map user task progress
     const userTaskMap = new Map(userTasks.map((ut) => [ut.taskId, ut]))
 
-    // Format tasks by type
-    const daily = allTasks
-      .filter((t) => t.type === "DAILY")
-      .map((t) => {
-        const userTask = userTaskMap.get(t.id)
-        return {
-          id: t.id,
-          name: t.name,
-          reward: t.reward,
-          completed: userTask?.status === "COMPLETED" || userTask?.status === "CLAIMED",
-          progress: userTask ? { current: userTask.progress, target: t.targetProgress } : undefined,
-        }
-      })
+    // Format all tasks with full details for UI
+    const tasks = allTasks.map((t) => {
+      const userTask = userTaskMap.get(t.id)
+      const status = userTask?.status || "ACTIVE"
+      return {
+        id: t.id,
+        slug: t.slug,
+        name: t.name,
+        description: t.description,
+        type: t.type,
+        icon: t.icon,
+        reward: t.reward,
+        xpReward: t.xpReward,
+        externalUrl: t.externalUrl,
+        status,
+        progress: userTask?.progress || 0,
+        targetProgress: t.targetProgress,
+      }
+    })
 
-    const external = allTasks
-      .filter((t) => t.type === "EXTERNAL")
-      .map((t) => {
-        const userTask = userTaskMap.get(t.id)
-        return {
-          id: t.id,
-          name: t.name,
-          reward: t.reward,
-          completed: userTask?.status === "COMPLETED" || userTask?.status === "CLAIMED",
-          link: t.externalUrl,
-        }
-      })
+    // Calculate summary stats
+    const completedCount = userTasks.filter(
+      (ut) => ut.status === "COMPLETED" || ut.status === "CLAIMED"
+    ).length
+    const claimedTodayCount = userTasks.filter(
+      (ut) => ut.status === "CLAIMED" && ut.claimedAt &&
+        new Date(ut.claimedAt).toDateString() === new Date().toDateString()
+    ).length
 
-    const achievements = allTasks
-      .filter((t) => t.type === "ACHIEVEMENT")
-      .map((t) => {
-        const userTask = userTaskMap.get(t.id)
-        return {
-          id: t.id,
-          name: t.name,
-          reward: t.reward,
-          completed: userTask?.status === "COMPLETED" || userTask?.status === "CLAIMED",
-          progress: t.targetProgress > 1
-            ? { current: userTask?.progress || 0, target: t.targetProgress }
-            : undefined,
-        }
-      })
+    const summary = {
+      total: allTasks.length,
+      completed: completedCount,
+      claimedToday: claimedTodayCount,
+    }
 
     // Format streak data
     const currentStreak = streak?.currentStreak || 0
@@ -105,9 +98,8 @@ export async function GET() {
     }
 
     return NextResponse.json({
-      daily,
-      external,
-      achievements,
+      tasks,
+      summary,
       streak: streakData,
     })
   } catch (error) {
@@ -171,6 +163,19 @@ export async function POST(request: Request) {
     }
 
     if (action === "claim") {
+      // Enforce wallet connection before allowing claim
+      const wallet = await db.wallet.findUnique({
+        where: { userId: user.id },
+        select: { isConnected: true },
+      })
+
+      if (!wallet || !wallet.isConnected) {
+        return NextResponse.json(
+          { error: "Wallet must be connected to claim task rewards", code: "WALLET_NOT_CONNECTED" },
+          { status: 403 }
+        )
+      }
+
       if (!userTask || userTask.status !== "COMPLETED") {
         return NextResponse.json(
           { error: "Task must be completed before claiming" },

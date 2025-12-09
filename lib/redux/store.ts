@@ -5,6 +5,7 @@ import tokensReducer from "./slices/tokens-slice"
 import achievementsReducer from "./slices/achievements-slice"
 import nftsReducer from "./slices/nfts-slice"
 import walletReducer from "./slices/wallet-slice"
+import tasksReducer from "./slices/tasks-slice"
 
 export const store = configureStore({
   reducer: {
@@ -14,6 +15,7 @@ export const store = configureStore({
     achievements: achievementsReducer,
     nfts: nftsReducer,
     wallet: walletReducer,
+    tasks: tasksReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

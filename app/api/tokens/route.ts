@@ -57,18 +57,38 @@ export async function GET() {
       }),
     ])
 
-    // Check if daily claim is available
-    const streak = await db.dailyStreak.findUnique({
-      where: { userId: user.id },
-    })
+    // Check if daily claim is available and get wallet status
+    const [streak, wallet, streakRewards] = await Promise.all([
+      db.dailyStreak.findUnique({
+        where: { userId: user.id },
+      }),
+      db.wallet.findUnique({
+        where: { userId: user.id },
+        select: { isConnected: true },
+      }),
+      db.streakReward.findMany({
+        orderBy: { day: "asc" },
+      }),
+    ])
 
     const lastClaimDate = streak?.lastClaimDate
     const canClaimToday = !lastClaimDate ||
       new Date(lastClaimDate).toDateString() !== now.toDateString()
 
-    // Format response
+    // Calculate next reward amount
+    const currentStreak = streak?.currentStreak || 0
+    const nextDay = canClaimToday ? (currentStreak % 7) + 1 : ((currentStreak % 7) + 1)
+    const nextReward = streakRewards.find((sr) => sr.day === nextDay)
+    const nextRewardAmount = nextReward?.reward || 50 + (nextDay - 1) * 25
+
+    // Format response with new fields
     return NextResponse.json({
       balance: user.tokenBalance,
+      totalEarned: user.totalEarned,
+      walletConnected: wallet?.isConnected ?? false,
+      dailyClaimAvailable: canClaimToday,
+      nextRewardAmount,
+      currentStreak,
       history: transactions.map((t) => ({
         type: t.type.toLowerCase().replace("_", "-"),
         amount: t.amount,
@@ -80,7 +100,6 @@ export async function GET() {
         thisWeek: weekEarnings._sum.amount || 0,
         thisMonth: monthEarnings._sum.amount || 0,
       },
-      dailyClaimAvailable: canClaimToday,
     })
   } catch (error) {
     console.error("Error fetching tokens:", error)
@@ -104,6 +123,19 @@ export async function POST(request: Request) {
     const { action, amount } = await request.json()
 
     if (action === "claim") {
+      // Enforce wallet connection before allowing claim
+      const wallet = await db.wallet.findUnique({
+        where: { userId: user.id },
+        select: { isConnected: true },
+      })
+
+      if (!wallet || !wallet.isConnected) {
+        return NextResponse.json(
+          { error: "Wallet must be connected to claim rewards", code: "WALLET_NOT_CONNECTED" },
+          { status: 403 }
+        )
+      }
+
       // This is for claiming daily streak reward
       try {
         const result = await claimDailyStreak(user.id)

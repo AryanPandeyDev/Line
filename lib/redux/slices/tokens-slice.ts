@@ -14,6 +14,9 @@ interface TokensState {
   totalEarned: number
   transactions: Transaction[]
   dailyClaimAvailable: boolean
+  walletConnected: boolean
+  nextRewardAmount: number
+  currentStreak: number
   lastClaimDate: string | null
   isLoading: boolean
   error: string | null
@@ -25,6 +28,9 @@ const initialState: TokensState = {
   totalEarned: 0,
   transactions: [],
   dailyClaimAvailable: false,
+  walletConnected: false,
+  nextRewardAmount: 50,
+  currentStreak: 0,
   lastClaimDate: null,
   isLoading: false,
   error: null,
@@ -91,14 +97,18 @@ const tokensSlice = createSlice({
       .addCase(fetchTokens.fulfilled, (state, action) => {
         state.isLoading = false
         state.balance = action.payload.balance
+        state.totalEarned = action.payload.totalEarned ?? 0
+        state.walletConnected = action.payload.walletConnected ?? false
+        state.nextRewardAmount = action.payload.nextRewardAmount ?? 50
+        state.currentStreak = action.payload.currentStreak ?? 0
         state.dailyClaimAvailable = action.payload.dailyClaimAvailable
-        state.transactions = action.payload.history.map((h: { type: string; amount: number; source: string; timestamp: string }, i: number) => ({
+        state.transactions = action.payload.history?.map((h: { type: string; amount: number; source: string; timestamp: string }, i: number) => ({
           id: `tx-${i}`,
           type: h.type as Transaction["type"],
           amount: h.amount,
           description: h.source,
           timestamp: h.timestamp,
-        }))
+        })) ?? []
       })
       .addCase(fetchTokens.rejected, (state, action) => {
         state.isLoading = false
@@ -129,3 +139,6 @@ export const selectTransactions = (state: { tokens: TokensState }) => state.toke
 export const selectDailyClaimAvailable = (state: { tokens: TokensState }) => state.tokens.dailyClaimAvailable
 export const selectTotalEarned = (state: { tokens: TokensState }) => state.tokens.totalEarned
 export const selectTokensLoading = (state: { tokens: TokensState }) => state.tokens.isLoading
+export const selectWalletConnected = (state: { tokens: TokensState }) => state.tokens.walletConnected
+export const selectNextRewardAmount = (state: { tokens: TokensState }) => state.tokens.nextRewardAmount
+export const selectCurrentStreak = (state: { tokens: TokensState }) => state.tokens.currentStreak
