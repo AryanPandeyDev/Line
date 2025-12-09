@@ -121,8 +121,20 @@ const authSlice = createSlice({
         state.error = action.payload as string
         state.isAuthenticated = false
       })
+      .addCase(updateUserProfile.pending, (state) => {
+        state.isLoading = true
+        state.error = null
+      })
       .addCase(updateUserProfile.fulfilled, (state, action) => {
-        state.user = action.payload
+        state.isLoading = false
+        // Merge the updated user data
+        if (state.user && action.payload) {
+          state.user = { ...state.user, ...action.payload }
+        }
+      })
+      .addCase(updateUserProfile.rejected, (state, action) => {
+        state.isLoading = false
+        state.error = action.payload as string
       })
   },
 })

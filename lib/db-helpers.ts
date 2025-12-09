@@ -10,6 +10,14 @@ export function generateReferralCode(): string {
 }
 
 /**
+ * Generate a random username in format user_XXXXXX
+ */
+export function generateRandomUsername(): string {
+    const digits = Math.floor(100000 + Math.random() * 900000) // 6 digits
+    return `user_${digits}`
+}
+
+/**
  * Get user by Clerk ID, optionally creating if not exists
  */
 export async function getUserByClerkId(
@@ -18,6 +26,8 @@ export async function getUserByClerkId(
         createIfNotExists?: boolean
         email?: string
         username?: string
+        displayName?: string
+        avatarUrl?: string
     }
 ): Promise<User | null> {
     let user = await db.user.findUnique({
@@ -25,7 +35,26 @@ export async function getUserByClerkId(
     })
 
     if (!user && options?.createIfNotExists && options.email) {
-        const username = options.username || `user_${nanoid(8)}`
+        // Generate username if not provided
+        let username = options.username
+        if (!username) {
+            // Try to generate a unique username
+            for (let i = 0; i < 5; i++) {
+                const candidate = generateRandomUsername()
+                const exists = await db.user.findUnique({
+                    where: { username: candidate },
+                    select: { id: true },
+                })
+                if (!exists) {
+                    username = candidate
+                    break
+                }
+            }
+            if (!username) {
+                username = `user_${nanoid(8)}`
+            }
+        }
+
         const referralCode = generateReferralCode()
 
         user = await db.user.create({
@@ -33,6 +62,8 @@ export async function getUserByClerkId(
                 clerkId,
                 email: options.email,
                 username,
+                displayName: options.displayName || null,
+                avatarUrl: options.avatarUrl || null,
                 referralCode,
                 level: 1,
                 xp: 0,

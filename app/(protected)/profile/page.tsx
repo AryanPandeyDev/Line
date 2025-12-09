@@ -1,32 +1,133 @@
 "use client"
 
-import { useState } from "react"
-import { User, Mail, Shield, Bell, Palette, LogOut, Camera, Trophy, Gamepad2, Coins, Clock } from "lucide-react"
+import { useEffect, useState } from "react"
+import { User, Mail, Shield, Bell, Palette, LogOut, Camera, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { useAppDispatch } from "@/lib/redux/hooks"
-import { logout } from "@/lib/redux/slices/auth-slice"
+import { useAppDispatch, useAppSelector } from "@/lib/redux/hooks"
+import {
+  fetchUserProfile,
+  updateUserProfile,
+  logout,
+  selectUser,
+  selectAuthLoading,
+} from "@/lib/redux/slices/auth-slice"
 import { useRouter } from "next/navigation"
-
-const achievements = [
-  { name: "First Win", icon: Trophy, unlocked: true },
-  { name: "100 Games", icon: Gamepad2, unlocked: true },
-  { name: "Big Spender", icon: Coins, unlocked: false },
-  { name: "Veteran", icon: Clock, unlocked: false },
-]
+import { useToast } from "@/hooks/use-toast"
+import { UserProfile } from "@clerk/nextjs"
+import { dark } from "@clerk/themes"
 
 export default function ProfilePage() {
   const dispatch = useAppDispatch()
   const router = useRouter()
+  const { toast } = useToast()
+
+  const user = useAppSelector(selectUser)
+  const isLoading = useAppSelector(selectAuthLoading)
+
   const [activeTab, setActiveTab] = useState<"profile" | "security" | "preferences">("profile")
+
+  // Form state
+  const [username, setUsername] = useState("")
+  const [displayName, setDisplayName] = useState("")
+  const [bio, setBio] = useState("")
+  const [isSaving, setIsSaving] = useState(false)
+
+  // Load user profile on mount
+  useEffect(() => {
+    dispatch(fetchUserProfile())
+  }, [dispatch])
+
+  // Populate form when user data loads
+  useEffect(() => {
+    if (user) {
+      setUsername(user.username || "")
+      setDisplayName(user.displayName || "")
+    }
+  }, [user])
 
   const handleLogout = () => {
     dispatch(logout())
     router.push("/")
+  }
+
+  const handleSaveProfile = async () => {
+    if (!user) return
+
+    setIsSaving(true)
+    try {
+      const updates: { username?: string; displayName?: string } = {}
+
+      if (username !== user.username) {
+        updates.username = username
+      }
+      if (displayName !== user.displayName) {
+        updates.displayName = displayName
+      }
+
+      if (Object.keys(updates).length === 0) {
+        toast({
+          title: "No changes",
+          description: "No changes to save",
+        })
+        setIsSaving(false)
+        return
+      }
+
+      const result = await dispatch(updateUserProfile(updates)).unwrap()
+
+      toast({
+        title: "Profile Updated",
+        description: "Your changes have been saved",
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to update profile"
+      toast({
+        title: "Update Failed",
+        description: message.includes("USERNAME_TAKEN")
+          ? "That username is already taken"
+          : message,
+        variant: "destructive",
+      })
+    }
+    setIsSaving(false)
+  }
+
+  const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Convert to base64 data URL for now
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+      const dataUrl = e.target?.result as string
+      try {
+        await dispatch(updateUserProfile({ avatarUrl: dataUrl })).unwrap()
+        toast({
+          title: "Avatar Updated",
+          description: "Your profile picture has been changed",
+        })
+      } catch {
+        toast({
+          title: "Upload Failed",
+          description: "Could not update avatar",
+          variant: "destructive",
+        })
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  if (isLoading && !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    )
   }
 
   return (
@@ -41,39 +142,55 @@ export default function ProfilePage() {
       <Card className="mb-8 bg-gradient-to-br from-primary/10 via-card to-secondary/10 border-primary/20">
         <CardContent className="p-6">
           <div className="flex flex-col md:flex-row items-center gap-6">
+            {/* Avatar */}
             <div className="relative">
               <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary to-secondary p-1">
-                <div className="w-full h-full rounded-full bg-card flex items-center justify-center">
-                  <User className="w-12 h-12 text-primary" />
+                <div className="w-full h-full rounded-full bg-card flex items-center justify-center overflow-hidden">
+                  {user?.avatarUrl ? (
+                    <img
+                      src={user.avatarUrl}
+                      alt="Avatar"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <User className="w-12 h-12 text-primary" />
+                  )}
                 </div>
               </div>
-              <button className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/80 transition-colors">
+              <label className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/80 transition-colors cursor-pointer">
                 <Camera className="w-4 h-4" />
-              </button>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleAvatarChange}
+                />
+              </label>
             </div>
 
+            {/* User Info */}
             <div className="text-center md:text-left flex-1">
-              <h2 className="text-2xl font-bold mb-1">CyberPlayer_42</h2>
-              <p className="text-muted-foreground mb-3">player@example.com</p>
+              <h2 className="text-2xl font-bold mb-1">
+                {user?.displayName || user?.username || "User"}
+              </h2>
+              <p className="text-muted-foreground mb-3">{user?.email || ""}</p>
               <div className="flex flex-wrap gap-2 justify-center md:justify-start">
-                <Badge className="bg-primary/20 text-primary border-primary/50">Level 15</Badge>
-                <Badge className="bg-secondary/20 text-secondary border-secondary/50">Pro Member</Badge>
-                <Badge className="bg-accent/20 text-accent border-accent/50">Early Adopter</Badge>
+                <Badge className="bg-primary/20 text-primary border-primary/50">
+                  Level {user?.level || 1}
+                </Badge>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-              {achievements.map((achievement) => (
-                <div
-                  key={achievement.name}
-                  className={`p-3 rounded-lg ${achievement.unlocked ? "bg-primary/10" : "bg-card/50 opacity-50"}`}
-                >
-                  <achievement.icon
-                    className={`w-6 h-6 mx-auto mb-1 ${achievement.unlocked ? "text-primary" : "text-muted-foreground"}`}
-                  />
-                  <p className="text-xs">{achievement.name}</p>
-                </div>
-              ))}
+            {/* Stats */}
+            <div className="grid grid-cols-2 gap-4 text-center">
+              <div className="p-3 rounded-lg bg-primary/10">
+                <p className="text-2xl font-bold text-primary">{user?.tokens?.toLocaleString() || 0}</p>
+                <p className="text-xs text-muted-foreground">LINE Tokens</p>
+              </div>
+              <div className="p-3 rounded-lg bg-secondary/10">
+                <p className="text-2xl font-bold text-secondary">{user?.xp || 0}</p>
+                <p className="text-xs text-muted-foreground">XP</p>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -85,17 +202,17 @@ export default function ProfilePage() {
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-6 py-2 rounded-full font-medium transition-all capitalize ${
-              activeTab === tab
-                ? "bg-primary text-primary-foreground shadow-neon-primary"
-                : "bg-card/50 text-muted-foreground hover:bg-card"
-            }`}
+            className={`px-6 py-2 rounded-full font-medium transition-all capitalize ${activeTab === tab
+              ? "bg-primary text-primary-foreground shadow-neon-primary"
+              : "bg-card/50 text-muted-foreground hover:bg-card"
+              }`}
           >
             {tab}
           </button>
         ))}
       </div>
 
+      {/* Profile Tab */}
       {activeTab === "profile" && (
         <Card className="bg-card/50 border-border/50">
           <CardHeader>
@@ -108,26 +225,73 @@ export default function ProfilePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="username">Username</Label>
-                <Input id="username" defaultValue="CyberPlayer_42" className="bg-background/50 mt-1" />
+                <Input
+                  id="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="bg-background/50 mt-1"
+                  placeholder="your_username"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  3-20 characters, letters, numbers, underscores only
+                </p>
               </div>
               <div>
                 <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" defaultValue="player@example.com" className="bg-background/50 mt-1" />
+                <Input
+                  id="email"
+                  type="email"
+                  value={user?.email || ""}
+                  className="bg-background/50 mt-1"
+                  disabled
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Email is managed via Clerk
+                </p>
               </div>
               <div>
                 <Label htmlFor="displayName">Display Name</Label>
-                <Input id="displayName" defaultValue="Cyber Player" className="bg-background/50 mt-1" />
+                <Input
+                  id="displayName"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  className="bg-background/50 mt-1"
+                  placeholder="Your Name"
+                />
               </div>
               <div>
                 <Label htmlFor="bio">Bio</Label>
-                <Input id="bio" placeholder="Tell us about yourself..." className="bg-background/50 mt-1" />
+                <Input
+                  id="bio"
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value)}
+                  placeholder="Tell us about yourself..."
+                  className="bg-background/50 mt-1"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Bio is stored locally for now
+                </p>
               </div>
             </div>
-            <Button className="bg-primary hover:bg-primary/80">Save Changes</Button>
+            <Button
+              className="bg-primary hover:bg-primary/80"
+              onClick={handleSaveProfile}
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Saving...
+                </>
+              ) : (
+                "Save Changes"
+              )}
+            </Button>
           </CardContent>
         </Card>
       )}
 
+      {/* Security Tab - Clerk Integration */}
       {activeTab === "security" && (
         <Card className="bg-card/50 border-border/50">
           <CardHeader>
@@ -137,36 +301,24 @@ export default function ProfilePage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div>
-              <h3 className="font-medium mb-4">Change Password</h3>
-              <div className="space-y-3">
-                <div>
-                  <Label htmlFor="currentPassword">Current Password</Label>
-                  <Input id="currentPassword" type="password" className="bg-background/50 mt-1" />
-                </div>
-                <div>
-                  <Label htmlFor="newPassword">New Password</Label>
-                  <Input id="newPassword" type="password" className="bg-background/50 mt-1" />
-                </div>
-                <div>
-                  <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                  <Input id="confirmPassword" type="password" className="bg-background/50 mt-1" />
-                </div>
-                <Button className="bg-primary hover:bg-primary/80">Update Password</Button>
-              </div>
+            {/* Clerk UserProfile for security management */}
+            <div className="rounded-lg overflow-hidden">
+              <UserProfile
+                routing="hash"
+                appearance={{
+                  baseTheme: dark,
+                  elements: {
+                    rootBox: "w-full",
+                    card: "bg-transparent shadow-none",
+                    navbar: "hidden",
+                    pageScrollBox: "p-0",
+                    profileSection: "border-border/50",
+                  },
+                }}
+              />
             </div>
 
-            <div className="border-t border-border/50 pt-6">
-              <h3 className="font-medium mb-4">Two-Factor Authentication</h3>
-              <div className="flex items-center justify-between p-4 rounded-lg bg-background/50">
-                <div>
-                  <p className="font-medium">Enable 2FA</p>
-                  <p className="text-sm text-muted-foreground">Add an extra layer of security</p>
-                </div>
-                <Switch />
-              </div>
-            </div>
-
+            {/* Logout button */}
             <div className="border-t border-border/50 pt-6">
               <Button variant="destructive" onClick={handleLogout} className="w-full md:w-auto">
                 <LogOut className="w-4 h-4 mr-2" />
@@ -177,6 +329,7 @@ export default function ProfilePage() {
         </Card>
       )}
 
+      {/* Preferences Tab */}
       {activeTab === "preferences" && (
         <Card className="bg-card/50 border-border/50">
           <CardHeader>
