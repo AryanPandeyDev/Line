@@ -13,6 +13,8 @@ export interface User {
   bonusPoints: number
   referralCode: string
   totalReferrals: number
+  totalPlayTimeSeconds: number
+  totalPlayTimeHours: number
   createdAt: string
 }
 
@@ -134,3 +136,4 @@ export const selectIsAuthenticated = (state: { auth: AuthState }) => state.auth.
 export const selectAuthLoading = (state: { auth: AuthState }) => state.auth.isLoading
 export const selectUserTokens = (state: { auth: AuthState }) => state.auth.user?.tokens || 0
 export const selectUserLevel = (state: { auth: AuthState }) => state.auth.user?.level || 1
+export const selectTotalPlayTimeHours = (state: { auth: AuthState }) => state.auth.user?.totalPlayTimeHours || 0

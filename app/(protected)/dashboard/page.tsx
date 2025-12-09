@@ -1,28 +1,19 @@
 "use client"
 
+import { useEffect } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { Coins, Trophy, Gamepad2, ImageIcon, Clock, TrendingUp, ChevronRight, Wallet } from "lucide-react"
 import { NeonCard } from "@/components/ui/neon-card"
 import { NeonButton } from "@/components/ui/neon-button"
 import { useAppSelector, useAppDispatch } from "@/lib/redux/hooks"
-import { selectUser } from "@/lib/redux/slices/auth-slice"
-import { selectTokenBalance, selectTotalEarned } from "@/lib/redux/slices/tokens-slice"
-import { selectUnlockedAchievements, selectAchievements } from "@/lib/redux/slices/achievements-slice"
+import { selectUser, selectTotalPlayTimeHours, fetchUserProfile } from "@/lib/redux/slices/auth-slice"
+import { selectTokenBalance, selectTotalEarned, fetchTokens } from "@/lib/redux/slices/tokens-slice"
+import { selectUnlockedAchievements, selectAchievements, fetchAchievements } from "@/lib/redux/slices/achievements-slice"
 import { selectInventory } from "@/lib/redux/slices/nfts-slice"
-import { selectIsWalletConnected, selectShortAddress } from "@/lib/redux/slices/wallet-slice"
+import { selectIsWalletConnected, selectShortAddress, fetchWallet } from "@/lib/redux/slices/wallet-slice"
 import { openModal } from "@/lib/redux/slices/ui-slice"
 import { cn } from "@/lib/utils"
-
-const mockPlaytimeData = [
-  { day: "Mon", hours: 2.5 },
-  { day: "Tue", hours: 4 },
-  { day: "Wed", hours: 1.5 },
-  { day: "Thu", hours: 3 },
-  { day: "Fri", hours: 5 },
-  { day: "Sat", hours: 6 },
-  { day: "Sun", hours: 4.5 },
-]
 
 const featuredNFTs = [
   { id: 1, name: "Cyber Wolf", image: "/cyberpunk-wolf-with-neon-blue-eyes-and-chrome-armo.jpg", rarity: "Epic" },
@@ -51,8 +42,15 @@ export default function DashboardPage() {
   const inventory = useAppSelector(selectInventory)
   const isWalletConnected = useAppSelector(selectIsWalletConnected)
   const shortAddress = useAppSelector(selectShortAddress)
+  const totalPlayTimeHours = useAppSelector(selectTotalPlayTimeHours)
 
-  const maxHours = Math.max(...mockPlaytimeData.map((d) => d.hours))
+  // Fetch user data on mount
+  useEffect(() => {
+    dispatch(fetchUserProfile())
+    dispatch(fetchTokens())
+    dispatch(fetchAchievements())
+    dispatch(fetchWallet())
+  }, [dispatch])
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -126,21 +124,19 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <Clock className="w-5 h-5 text-primary" />
-              <h2 className="font-bold">Weekly Playtime</h2>
+              <h2 className="font-bold">Total Playtime</h2>
             </div>
-            <span className="text-sm text-muted-foreground">26.5 hours total</span>
+            <span className="text-sm text-muted-foreground">{totalPlayTimeHours} hours played</span>
           </div>
 
-          <div className="flex items-end justify-between gap-2 h-40">
-            {mockPlaytimeData.map((day, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                <div
-                  className="w-full rounded-t-lg bg-gradient-to-t from-neon-cyan/50 to-neon-purple/50 transition-all hover:from-neon-cyan hover:to-neon-purple"
-                  style={{ height: `${(day.hours / maxHours) * 100}%` }}
-                />
-                <span className="text-xs text-muted-foreground">{day.day}</span>
-              </div>
-            ))}
+          <div className="flex items-center justify-center h-40">
+            <div className="text-center">
+              <p className="text-5xl font-bold neon-text-cyan mb-2">{totalPlayTimeHours}</p>
+              <p className="text-muted-foreground">Total Hours Played</p>
+              {totalPlayTimeHours === 0 && (
+                <p className="text-sm text-muted-foreground mt-4">Start playing games to track your time!</p>
+              )}
+            </div>
           </div>
         </NeonCard>
 

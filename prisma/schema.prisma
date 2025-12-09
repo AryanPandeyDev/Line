@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
   output   = "../lib/generated/prisma"
@@ -10,9 +7,371 @@ datasource db {
   provider = "postgresql"
 }
 
-// ============================================================================
-// ENUMS
-// ============================================================================
+model User {
+  id                String             @id @default(cuid())
+  clerkId           String             @unique
+  email             String             @unique
+  username          String             @unique
+  displayName       String?
+  avatarUrl         String?
+  level             Int                @default(1)
+  xp                Int                @default(0)
+  xpToNextLevel     Int                @default(1000)
+  tokenBalance      Int                @default(0)
+  bonusPoints       Int                @default(0)
+  totalEarned       Int                @default(0)
+  referralCode      String             @unique
+  referredById      String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  lastLoginAt       DateTime?
+  dailyStreaks      DailyStreak?
+  nftBids           NFTBid[]
+  notifications     Notification[]
+  referralStats     ReferralStats?
+  tokenTransactions TokenTransaction[]
+  referredBy        User?              @relation("Referrals", fields: [referredById], references: [id])
+  referrals         User[]             @relation("Referrals")
+  achievements      UserAchievement[]
+  gameProgress      UserGameProgress[]
+  ownedNFTs         UserNFT[]
+  tasks             UserTask[]
+  wallet            Wallet?
+
+  @@index([clerkId])
+  @@index([referralCode])
+  @@index([referredById])
+}
+
+model Wallet {
+  id           String              @id @default(cuid())
+  userId       String              @unique
+  address      String              @unique
+  network      NetworkType         @default(VARA_TESTNET)
+  isConnected  Boolean             @default(false)
+  varaBalance  Float               @default(0)
+  lineBalance  Float               @default(0)
+  connectedAt  DateTime?
+  lastSyncedAt DateTime?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[]
+
+  @@index([address])
+}
+
+model WalletTransaction {
+  id          String                @id @default(cuid())
+  walletId    String
+  type        WalletTransactionType
+  status      TransactionStatus     @default(PENDING)
+  tokenType   TokenType
+  amount      Float
+  fromAddress String
+  toAddress   String
+  txHash      String?               @unique
+  nftId       String?
+  createdAt   DateTime              @default(now())
+  confirmedAt DateTime?
+  nft         NFT?                  @relation(fields: [nftId], references: [id])
+  wallet      Wallet                @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId])
+  @@index([txHash])
+  @@index([status])
+}
+
+model TokenTransaction {
+  id        String               @id @default(cuid())
+  userId    String
+  type      TokenTransactionType
+  amount    Int
+  balance   Int
+  source    String
+  metadata  Json?
+  createdAt DateTime             @default(now())
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model Game {
+  id               String             @id @default(cuid())
+  slug             String             @unique
+  name             String
+  description      String
+  shortDescription String?
+  coverImage       String
+  bannerImage      String?
+  screenshots      String[]
+  category         GameCategory
+  tags             String[]
+  playerCount      Int                @default(0)
+  rating           Float              @default(0)
+  ratingCount      Int                @default(0)
+  rewardMin        Int                @default(0)
+  rewardMax        Int                @default(0)
+  status           GameStatus         @default(COMING_SOON)
+  releaseDate      DateTime?
+  minPlayers       Int                @default(1)
+  maxPlayers       Int                @default(1)
+  avgPlayTime      Int?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  achievements     Achievement[]
+  userProgress     UserGameProgress[]
+
+  @@index([category])
+  @@index([status])
+}
+
+model UserGameProgress {
+  id            String    @id @default(cuid())
+  userId        String
+  gameId        String
+  gamesPlayed   Int       @default(0)
+  wins          Int       @default(0)
+  losses        Int       @default(0)
+  highScore     Int       @default(0)
+  totalScore    Int       @default(0)
+  totalPlayTime Int       @default(0)
+  tokensEarned  Int       @default(0)
+  lastPlayedAt  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  game          Game      @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gameId])
+  @@index([userId])
+  @@index([gameId])
+}
+
+model NFT {
+  id              String              @id @default(cuid())
+  tokenId         String?             @unique
+  contractAddress String?
+  name            String
+  description     String?
+  image           String
+  creatorId       String?
+  creatorName     String
+  rarity          NFTRarity
+  collection      String?
+  attributes      Json?
+  currentPrice    Float?
+  lastSalePrice   Float?
+  likes           Int                 @default(0)
+  views           Int                 @default(0)
+  mintedAt        DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  bids            NFTBid[]
+  listings        NFTListing[]
+  owners          UserNFT[]
+  walletTxns      WalletTransaction[]
+
+  @@index([rarity])
+  @@index([collection])
+}
+
+model NFTListing {
+  id        String           @id @default(cuid())
+  nftId     String
+  sellerId  String
+  price     Float
+  tokenType TokenType        @default(LINE)
+  status    NFTListingStatus @default(LISTED)
+  expiresAt DateTime?
+  createdAt DateTime         @default(now())
+  soldAt    DateTime?
+  bids      NFTBid[]
+  nft       NFT              @relation(fields: [nftId], references: [id], onDelete: Cascade)
+
+  @@index([nftId])
+  @@index([status])
+  @@index([sellerId])
+}
+
+model NFTBid {
+  id        String     @id @default(cuid())
+  listingId String
+  nftId     String
+  bidderId  String
+  amount    Float
+  tokenType TokenType  @default(LINE)
+  isWinning Boolean    @default(false)
+  createdAt DateTime   @default(now())
+  bidder    User       @relation(fields: [bidderId], references: [id], onDelete: Cascade)
+  listing   NFTListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  nft       NFT        @relation(fields: [nftId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@index([bidderId])
+  @@index([nftId])
+}
+
+model UserNFT {
+  id          String   @id @default(cuid())
+  userId      String
+  nftId       String
+  acquiredAt  DateTime @default(now())
+  acquiredFor Float?
+  isFavorite  Boolean  @default(false)
+  nft         NFT      @relation(fields: [nftId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, nftId])
+  @@index([userId])
+  @@index([nftId])
+}
+
+model Task {
+  id             String     @id @default(cuid())
+  slug           String     @unique
+  name           String
+  description    String
+  type           TaskType
+  reward         Int
+  xpReward       Int        @default(0)
+  targetProgress Int        @default(1)
+  externalUrl    String?
+  icon           String?
+  isActive       Boolean    @default(true)
+  isRepeatable   Boolean    @default(false)
+  resetPeriod    String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  userTasks      UserTask[]
+
+  @@index([type])
+  @@index([isActive])
+}
+
+model UserTask {
+  id          String     @id @default(cuid())
+  userId      String
+  taskId      String
+  status      TaskStatus @default(ACTIVE)
+  progress    Int        @default(0)
+  startedAt   DateTime   @default(now())
+  completedAt DateTime?
+  claimedAt   DateTime?
+  periodStart DateTime?
+  task        Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, taskId, periodStart])
+  @@index([userId])
+  @@index([taskId])
+  @@index([status])
+}
+
+model Achievement {
+  id               String            @id @default(cuid())
+  slug             String            @unique
+  name             String
+  description      String
+  icon             String
+  xpReward         Int               @default(0)
+  tokenReward      Int               @default(0)
+  targetValue      Int               @default(1)
+  gameId           String?
+  sortOrder        Int               @default(0)
+  isHidden         Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  game             Game?             @relation(fields: [gameId], references: [id])
+  userAchievements UserAchievement[]
+
+  @@index([gameId])
+}
+
+model UserAchievement {
+  id            String      @id @default(cuid())
+  userId        String
+  achievementId String
+  progress      Int         @default(0)
+  isUnlocked    Boolean     @default(false)
+  unlockedAt    DateTime?
+  claimedAt     DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+  @@index([userId])
+  @@index([achievementId])
+  @@index([isUnlocked])
+}
+
+model DailyStreak {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  currentStreak   Int       @default(0)
+  longestStreak   Int       @default(0)
+  lastClaimDate   DateTime?
+  streakStartDate DateTime?
+  claimedDays     Int[]     @default([])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model StreakReward {
+  id     String @id @default(cuid())
+  day    Int    @unique
+  reward Int
+
+  @@index([day])
+}
+
+model ReferralStats {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  totalReferrals  Int      @default(0)
+  activeReferrals Int      @default(0)
+  totalEarned     Int      @default(0)
+  currentTier     Int      @default(1)
+  commissionRate  Float    @default(0.05)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model ReferralTier {
+  id                String  @id @default(cuid())
+  tier              Int     @unique
+  requiredReferrals Int
+  reward            Int
+  commissionRate    Float
+  bonus             String?
+
+  @@index([tier])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      String
+  isRead    Boolean  @default(false)
+  metadata  Json?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}
 
 enum GameCategory {
   RACING
@@ -104,513 +463,4 @@ enum ReferralStatus {
   ACTIVE
   INACTIVE
   BANNED
-}
-
-// ============================================================================
-// USER & AUTHENTICATION
-// ============================================================================
-
-model User {
-  id          String  @id @default(cuid())
-  clerkId     String  @unique // Clerk user ID for auth sync
-  email       String  @unique
-  username    String  @unique
-  displayName String?
-  avatarUrl   String?
-
-  // Progression
-  level         Int @default(1)
-  xp            Int @default(0)
-  xpToNextLevel Int @default(1000)
-
-  // Token balances (LINE tokens - in-app currency)
-  tokenBalance Int @default(0)
-  bonusPoints  Int @default(0)
-  totalEarned  Int @default(0)
-
-  // Referral system
-  referralCode String  @unique
-  referredById String?
-  referredBy   User?   @relation("Referrals", fields: [referredById], references: [id])
-  referrals    User[]  @relation("Referrals")
-
-  // Timestamps
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  lastLoginAt DateTime?
-
-  // Relations
-  wallet            Wallet?
-  achievements      UserAchievement[]
-  tasks             UserTask[]
-  gameProgress      UserGameProgress[]
-  ownedNFTs         UserNFT[]
-  nftBids           NFTBid[]
-  tokenTransactions TokenTransaction[]
-  dailyStreaks      DailyStreak[]
-  referralStats     ReferralStats?
-  notifications     Notification[]
-
-  @@index([clerkId])
-  @@index([referralCode])
-  @@index([referredById])
-}
-
-// ============================================================================
-// WALLET & BLOCKCHAIN
-// ============================================================================
-
-model Wallet {
-  id     String @id @default(cuid())
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  address     String      @unique
-  network     NetworkType @default(VARA_TESTNET)
-  isConnected Boolean     @default(false)
-
-  // On-chain balances (synced from blockchain)
-  varaBalance Float @default(0)
-  lineBalance Float @default(0)
-
-  connectedAt  DateTime?
-  lastSyncedAt DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  transactions WalletTransaction[]
-
-  @@index([address])
-}
-
-model WalletTransaction {
-  id       String @id @default(cuid())
-  walletId String
-  wallet   Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
-
-  type      WalletTransactionType
-  status    TransactionStatus     @default(PENDING)
-  tokenType TokenType
-  amount    Float
-
-  fromAddress String
-  toAddress   String
-  txHash      String? @unique
-
-  // Optional NFT reference for NFT transactions
-  nftId String?
-  nft   NFT?    @relation(fields: [nftId], references: [id])
-
-  createdAt   DateTime  @default(now())
-  confirmedAt DateTime?
-
-  @@index([walletId])
-  @@index([txHash])
-  @@index([status])
-}
-
-// ============================================================================
-// TOKEN ECONOMY (In-App LINE Tokens)
-// ============================================================================
-
-model TokenTransaction {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  type    TokenTransactionType
-  amount  Int // Positive for earn, negative for spend
-  balance Int // Balance after transaction
-
-  source   String // Description: "Daily Reward", "Game Winnings", etc.
-  metadata Json? // Additional context (gameId, achievementId, etc.)
-
-  createdAt DateTime @default(now())
-
-  @@index([userId])
-  @@index([type])
-  @@index([createdAt])
-}
-
-// ============================================================================
-// GAMES
-// ============================================================================
-
-model Game {
-  id               String  @id @default(cuid())
-  slug             String  @unique
-  name             String
-  description      String
-  shortDescription String?
-
-  // Media
-  coverImage  String
-  bannerImage String?
-  screenshots String[] // Array of image URLs
-
-  // Classification
-  category GameCategory
-  tags     String[]
-
-  // Stats
-  playerCount Int   @default(0)
-  rating      Float @default(0)
-  ratingCount Int   @default(0)
-
-  // Rewards
-  rewardMin Int @default(0)
-  rewardMax Int @default(0)
-
-  // Status
-  status      GameStatus @default(COMING_SOON)
-  releaseDate DateTime?
-
-  // Metadata
-  minPlayers  Int  @default(1)
-  maxPlayers  Int  @default(1)
-  avgPlayTime Int? // In minutes
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  userProgress UserGameProgress[]
-  achievements Achievement[]
-
-  @@index([category])
-  @@index([status])
-}
-
-model UserGameProgress {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  gameId String
-  game   Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
-
-  // Stats
-  gamesPlayed   Int @default(0)
-  wins          Int @default(0)
-  losses        Int @default(0)
-  highScore     Int @default(0)
-  totalScore    Int @default(0)
-  totalPlayTime Int @default(0) // In seconds
-
-  // Earnings from this game
-  tokensEarned Int @default(0)
-
-  // Timestamps
-  lastPlayedAt DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  @@unique([userId, gameId])
-  @@index([userId])
-  @@index([gameId])
-}
-
-// ============================================================================
-// NFTs & MARKETPLACE
-// ============================================================================
-
-model NFT {
-  id              String  @id @default(cuid())
-  tokenId         String? @unique // On-chain token ID
-  contractAddress String?
-
-  name        String
-  description String?
-  image       String
-
-  // Creator info
-  creatorId   String?
-  creatorName String // Display name (may be external)
-
-  // Classification
-  rarity     NFTRarity
-  collection String?
-  attributes Json? // {"power": 10, "speed": 8, ...}
-
-  // Marketplace
-  currentPrice  Float?
-  lastSalePrice Float?
-  likes         Int    @default(0)
-  views         Int    @default(0)
-
-  // Minting info
-  mintedAt  DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-
-  // Relations
-  listings   NFTListing[]
-  bids       NFTBid[]
-  owners     UserNFT[]
-  walletTxns WalletTransaction[]
-
-  @@index([rarity])
-  @@index([collection])
-}
-
-model NFTListing {
-  id    String @id @default(cuid())
-  nftId String
-  nft   NFT    @relation(fields: [nftId], references: [id], onDelete: Cascade)
-
-  sellerId String
-
-  price     Float
-  tokenType TokenType        @default(LINE)
-  status    NFTListingStatus @default(LISTED)
-
-  expiresAt DateTime?
-  createdAt DateTime  @default(now())
-  soldAt    DateTime?
-
-  bids NFTBid[]
-
-  @@index([nftId])
-  @@index([status])
-  @@index([sellerId])
-}
-
-model NFTBid {
-  id        String     @id @default(cuid())
-  listingId String
-  listing   NFTListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  nftId     String
-  nft       NFT        @relation(fields: [nftId], references: [id], onDelete: Cascade)
-
-  bidderId String
-  bidder   User   @relation(fields: [bidderId], references: [id], onDelete: Cascade)
-
-  amount    Float
-  tokenType TokenType @default(LINE)
-  isWinning Boolean   @default(false)
-
-  createdAt DateTime @default(now())
-
-  @@index([listingId])
-  @@index([bidderId])
-  @@index([nftId])
-}
-
-model UserNFT {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  nftId  String
-  nft    NFT    @relation(fields: [nftId], references: [id], onDelete: Cascade)
-
-  acquiredAt  DateTime @default(now())
-  acquiredFor Float? // Purchase price
-  isFavorite  Boolean  @default(false)
-
-  @@unique([userId, nftId])
-  @@index([userId])
-  @@index([nftId])
-}
-
-// ============================================================================
-// TASKS & QUESTS
-// ============================================================================
-
-model Task {
-  id          String @id @default(cuid())
-  slug        String @unique
-  name        String
-  description String
-
-  type     TaskType
-  reward   Int // LINE tokens
-  xpReward Int      @default(0)
-
-  // Progress tracking
-  targetProgress Int @default(1) // e.g., "Play 3 games" = 3
-
-  // External tasks
-  externalUrl String?
-
-  // Icon/visual
-  icon String?
-
-  // Availability
-  isActive     Boolean @default(true)
-  isRepeatable Boolean @default(false) // Daily tasks are repeatable
-  resetPeriod  String? // "daily", "weekly", null for one-time
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  userTasks UserTask[]
-
-  @@index([type])
-  @@index([isActive])
-}
-
-model UserTask {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  taskId String
-  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
-
-  status   TaskStatus @default(ACTIVE)
-  progress Int        @default(0)
-
-  startedAt   DateTime  @default(now())
-  completedAt DateTime?
-  claimedAt   DateTime?
-
-  // For repeatable tasks, track the period
-  periodStart DateTime?
-
-  @@unique([userId, taskId, periodStart])
-  @@index([userId])
-  @@index([taskId])
-  @@index([status])
-}
-
-// ============================================================================
-// ACHIEVEMENTS
-// ============================================================================
-
-model Achievement {
-  id          String @id @default(cuid())
-  slug        String @unique
-  name        String
-  description String
-
-  icon String
-
-  // Rewards
-  xpReward    Int @default(0)
-  tokenReward Int @default(0)
-
-  // Progress requirement
-  targetValue Int @default(1) // e.g., "Win 100 games" = 100
-
-  // Optional game-specific achievement
-  gameId String?
-  game   Game?   @relation(fields: [gameId], references: [id])
-
-  // Ordering
-  sortOrder Int     @default(0)
-  isHidden  Boolean @default(false) // Hidden until unlocked
-
-  createdAt DateTime @default(now())
-
-  userAchievements UserAchievement[]
-
-  @@index([gameId])
-}
-
-model UserAchievement {
-  id            String      @id @default(cuid())
-  userId        String
-  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  achievementId String
-  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
-
-  progress   Int       @default(0)
-  isUnlocked Boolean   @default(false)
-  unlockedAt DateTime?
-  claimedAt  DateTime? // When rewards were claimed
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([userId, achievementId])
-  @@index([userId])
-  @@index([achievementId])
-  @@index([isUnlocked])
-}
-
-// ============================================================================
-// DAILY STREAKS
-// ============================================================================
-
-model DailyStreak {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  currentStreak Int @default(0)
-  longestStreak Int @default(0)
-
-  lastClaimDate   DateTime?
-  streakStartDate DateTime?
-
-  // Track which day rewards have been claimed (1-7)
-  claimedDays Int[] @default([])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([userId])
-  @@index([userId])
-}
-
-// Streak reward configuration
-model StreakReward {
-  id     String @id @default(cuid())
-  day    Int    @unique // Day 1-7
-  reward Int // LINE tokens
-
-  @@index([day])
-}
-
-// ============================================================================
-// REFERRALS
-// ============================================================================
-
-model ReferralStats {
-  id     String @id @default(cuid())
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  totalReferrals  Int @default(0)
-  activeReferrals Int @default(0)
-  totalEarned     Int @default(0)
-
-  currentTier    Int   @default(1)
-  commissionRate Float @default(0.05) // 5%
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-}
-
-model ReferralTier {
-  id                String  @id @default(cuid())
-  tier              Int     @unique
-  requiredReferrals Int
-  reward            Int // One-time bonus
-  commissionRate    Float // Ongoing commission
-  bonus             String? // Description like "10% commission + NFT"
-
-  @@index([tier])
-}
-
-// ============================================================================
-// NOTIFICATIONS
-// ============================================================================
-
-model Notification {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  title   String
-  message String
-  type    String // "achievement", "referral", "reward", "system"
-
-  isRead   Boolean @default(false)
-  metadata Json? // Additional data
-
-  createdAt DateTime @default(now())
-
-  @@index([userId])
-  @@index([isRead])
-  @@index([createdAt])
 }

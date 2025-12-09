@@ -1,4 +1,4 @@
-import { createSlice, createAsyncThunk, type PayloadAction } from "@reduxjs/toolkit"
+import { createSlice, createAsyncThunk, createSelector, type PayloadAction } from "@reduxjs/toolkit"
 
 export interface Achievement {
   id: string
@@ -148,9 +148,13 @@ export default achievementsSlice.reducer
 
 // Selectors
 export const selectAchievements = (state: { achievements: AchievementsState }) => state.achievements.achievements
-export const selectUnlockedAchievements = (state: { achievements: AchievementsState }) =>
-  state.achievements.achievements.filter((a) => a.unlocked)
-export const selectLockedAchievements = (state: { achievements: AchievementsState }) =>
-  state.achievements.achievements.filter((a) => !a.unlocked)
+export const selectUnlockedAchievements = createSelector(
+  [selectAchievements],
+  (achievements) => achievements.filter((a) => a.unlocked)
+)
+export const selectLockedAchievements = createSelector(
+  [selectAchievements],
+  (achievements) => achievements.filter((a) => !a.unlocked)
+)
 export const selectTotalUnlocked = (state: { achievements: AchievementsState }) => state.achievements.totalUnlocked
 export const selectAchievementsLoading = (state: { achievements: AchievementsState }) => state.achievements.isLoading
