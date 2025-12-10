@@ -1,4 +1,12 @@
 /**
+ * ============================================================================
+ * MIGRATION NOTE (for future refactoring steps):
+ * This Prisma client setup will be relocated to: src/lib/prisma/client.ts
+ * Do NOT change any import paths until the full migration step.
+ * ============================================================================
+ */
+
+/**
  * Supabase pooler requires TLS certificate bypass.
  * @prisma/adapter-pg doesn't properly pass SSL options to the underlying connection,
  * so we need to set this at the Node.js level.

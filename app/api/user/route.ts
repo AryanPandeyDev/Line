@@ -1,8 +1,20 @@
 import { NextResponse } from "next/server"
 import { auth, currentUser } from "@clerk/nextjs/server"
 import { db } from "@/lib/db"
-import { getUserByClerkId, generateRandomUsername } from "@/lib/db-helpers"
+import { userService } from "@/src/lib/services/userService"
+import { getUserByClerkId } from "@/lib/db-helpers"
 
+/**
+ * GET /api/user
+ * 
+ * Returns the current authenticated user's profile.
+ * Creates the user if they don't exist (first login).
+ * 
+ * Flow:
+ * 1. Authenticate via Clerk
+ * 2. Call userService.getOrCreateUserProfile
+ * 3. Return profile JSON
+ */
 export async function GET() {
     try {
         const { userId: clerkId } = await auth()
@@ -11,56 +23,22 @@ export async function GET() {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
         }
 
-        // Get Clerk user details
+        // Get Clerk user details for fallbacks and creation
         const clerkUser = await currentUser()
         if (!clerkUser) {
             return NextResponse.json({ error: "User not found" }, { status: 404 })
         }
 
-        // Get or create user in database
-        const user = await getUserByClerkId(clerkId, {
-            createIfNotExists: true,
-            email: clerkUser.emailAddresses[0]?.emailAddress || "",
-            username: clerkUser.username || undefined,
-            displayName: clerkUser.fullName || clerkUser.firstName || undefined,
-            avatarUrl: clerkUser.imageUrl || undefined,
+        // Get or create user profile via service layer
+        const profile = await userService.getOrCreateUserProfile(clerkId, {
+            firstName: clerkUser.firstName,
+            fullName: clerkUser.fullName,
+            imageUrl: clerkUser.imageUrl,
+            emailAddress: clerkUser.emailAddresses[0]?.emailAddress || "",
+            username: clerkUser.username,
         })
 
-        if (!user) {
-            return NextResponse.json({ error: "Failed to get or create user" }, { status: 500 })
-        }
-
-        // Get total play time from all game progress
-        const playTimeResult = await db.userGameProgress.aggregate({
-            where: { userId: user.id },
-            _sum: { totalPlayTime: true },
-        })
-
-        const totalPlayTimeSeconds = playTimeResult._sum.totalPlayTime || 0
-
-        // Get referral stats
-        const referralStats = await db.referralStats.findUnique({
-            where: { userId: user.id },
-        })
-
-        return NextResponse.json({
-            id: user.id,
-            clerkId: user.clerkId,
-            email: user.email,
-            username: user.username,
-            displayName: user.displayName || clerkUser.firstName || user.username,
-            avatarUrl: user.avatarUrl || clerkUser.imageUrl || null,
-            level: user.level,
-            xp: user.xp,
-            xpToNextLevel: user.xpToNextLevel,
-            tokens: user.tokenBalance,
-            bonusPoints: user.bonusPoints,
-            referralCode: user.referralCode,
-            totalReferrals: referralStats?.totalReferrals || 0,
-            totalPlayTimeSeconds,
-            totalPlayTimeHours: Math.round((totalPlayTimeSeconds / 3600) * 10) / 10,
-            createdAt: user.createdAt.toISOString(),
-        })
+        return NextResponse.json(profile)
     } catch (error) {
         console.error("Error fetching user:", error)
         return NextResponse.json({ error: "Internal server error" }, { status: 500 })

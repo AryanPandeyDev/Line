@@ -35,7 +35,22 @@ ON CONFLICT (slug) DO UPDATE SET
   "resetPeriod" = EXCLUDED."resetPeriod",
   "updatedAt" = NOW();
 
--- 3. Verify
+-- 3. Seed ReferralTiers
+INSERT INTO "ReferralTier" (id, tier, "requiredReferrals", reward, "commissionRate", bonus)
+VALUES 
+  (gen_random_uuid()::text, 1, 5, 500, 0.05, '5% commission'),
+  (gen_random_uuid()::text, 2, 15, 2000, 0.07, '7% commission'),
+  (gen_random_uuid()::text, 3, 50, 10000, 0.10, '10% commission'),
+  (gen_random_uuid()::text, 4, 100, 50000, 0.15, '15% commission + NFT')
+ON CONFLICT (tier) DO UPDATE SET 
+  "requiredReferrals" = EXCLUDED."requiredReferrals",
+  reward = EXCLUDED.reward,
+  "commissionRate" = EXCLUDED."commissionRate",
+  bonus = EXCLUDED.bonus;
+
+-- 4. Verify
 SELECT 'Tasks' as table_name, COUNT(*) as count FROM "Task"
 UNION ALL
-SELECT 'StreakRewards', COUNT(*) FROM "StreakReward";
+SELECT 'StreakRewards', COUNT(*) FROM "StreakReward"
+UNION ALL
+SELECT 'ReferralTiers', COUNT(*) FROM "ReferralTier";

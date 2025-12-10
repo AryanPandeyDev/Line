@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
-import { db } from "@/lib/db"
-import { getUserByClerkId, getOrCreateWallet } from "@/lib/db-helpers"
+import { walletService } from "@/src/lib/services/walletService"
 
+/**
+ * GET /api/wallet
+ * 
+ * Returns wallet info, balances, and transaction history.
+ */
 export async function GET() {
     try {
         const { userId: clerkId } = await auth()
@@ -11,73 +15,23 @@ export async function GET() {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
         }
 
-        const user = await getUserByClerkId(clerkId)
-        if (!user) {
+        const result = await walletService.getWalletInfo(clerkId)
+        if (!result) {
             return NextResponse.json({ error: "User not found" }, { status: 404 })
         }
 
-        // Get wallet
-        const wallet = await db.wallet.findUnique({
-            where: { userId: user.id },
-            include: {
-                transactions: {
-                    orderBy: { createdAt: "desc" },
-                    take: 10,
-                    include: {
-                        nft: {
-                            select: { name: true },
-                        },
-                    },
-                },
-            },
-        })
-
-        if (!wallet) {
-            return NextResponse.json({
-                isConnected: false,
-                address: null,
-                network: "unknown",
-                varaBalance: 0,
-                lineBalance: 0,
-                nftCount: 0,
-                transactions: [],
-            })
-        }
-
-        // Get NFT count
-        const nftCount = await db.userNFT.count({
-            where: { userId: user.id },
-        })
-
-        // Format transactions
-        const formattedTransactions = wallet.transactions.map((tx) => ({
-            id: tx.id,
-            type: tx.type.toLowerCase().replace("_", "-"),
-            amount: tx.amount,
-            token: tx.tokenType,
-            from: tx.fromAddress,
-            to: tx.toAddress,
-            timestamp: tx.createdAt.toISOString(),
-            status: tx.status.toLowerCase(),
-            nftName: tx.nft?.name || null,
-        }))
-
-        return NextResponse.json({
-            isConnected: wallet.isConnected,
-            address: wallet.address,
-            shortAddress: `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`,
-            network: wallet.network.toLowerCase().replace("_", "-"),
-            varaBalance: wallet.varaBalance,
-            lineBalance: wallet.lineBalance,
-            nftCount,
-            transactions: formattedTransactions,
-        })
+        return NextResponse.json(result)
     } catch (error) {
         console.error("Error fetching wallet:", error)
         return NextResponse.json({ error: "Internal server error" }, { status: 500 })
     }
 }
 
+/**
+ * POST /api/wallet
+ * 
+ * Actions: connect, disconnect, sync
+ */
 export async function POST(request: Request) {
     try {
         const { userId: clerkId } = await auth()
@@ -86,81 +40,42 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
         }
 
-        const user = await getUserByClerkId(clerkId)
-        if (!user) {
-            return NextResponse.json({ error: "User not found" }, { status: 404 })
-        }
-
         const { action, address, network } = await request.json()
 
         if (action === "connect" && address) {
-            const wallet = await getOrCreateWallet(user.id, address)
+            const result = await walletService.connectWallet(clerkId, address, network)
 
-            if (network) {
-                await db.wallet.update({
-                    where: { id: wallet.id },
-                    data: {
-                        network: network.toUpperCase().replace("-", "_") as "VARA_MAINNET" | "VARA_TESTNET",
-                    },
-                })
+            if (!result.success) {
+                return NextResponse.json({ error: result.message }, { status: 400 })
             }
 
             return NextResponse.json({
                 success: true,
-                message: "Wallet connected successfully!",
-                wallet: {
-                    address: wallet.address,
-                    shortAddress: `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`,
-                    network: wallet.network.toLowerCase().replace("_", "-"),
-                    varaBalance: wallet.varaBalance,
-                    lineBalance: wallet.lineBalance,
-                },
+                message: result.message,
+                wallet: result.wallet,
             })
         }
 
         if (action === "disconnect") {
-            const wallet = await db.wallet.findUnique({
-                where: { userId: user.id },
-            })
-
-            if (wallet) {
-                await db.wallet.update({
-                    where: { id: wallet.id },
-                    data: { isConnected: false },
-                })
-            }
-
+            const result = await walletService.disconnectWallet(clerkId)
             return NextResponse.json({
-                success: true,
-                message: "Wallet disconnected",
+                success: result.success,
+                message: result.message,
             })
         }
 
         if (action === "sync") {
-            // In production, this would call blockchain RPC to get real balances
-            const wallet = await db.wallet.findUnique({
-                where: { userId: user.id },
-            })
+            const result = await walletService.syncWallet(clerkId)
 
-            if (!wallet) {
-                return NextResponse.json(
-                    { error: "No wallet connected" },
-                    { status: 400 }
-                )
+            if (!result.success) {
+                return NextResponse.json({ error: result.message }, { status: 400 })
             }
-
-            // TODO: Implement real blockchain balance sync
-            // For now, just update the sync timestamp
-            await db.wallet.update({
-                where: { id: wallet.id },
-                data: { lastSyncedAt: new Date() },
-            })
 
             return NextResponse.json({
                 success: true,
-                message: "Wallet synced",
-                varaBalance: wallet.varaBalance,
-                lineBalance: wallet.lineBalance,
+                message: result.message,
+                varaBalance: result.varaBalance,
+                lineBalance: result.lineBalance,
             })
         }
 
