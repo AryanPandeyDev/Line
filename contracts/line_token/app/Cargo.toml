@@ -1,0 +1,11 @@
+[package]
+name = "line-token-app"
+version = "1.0.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+sails-rs = "0.9.2"
+gstd = "1.9.2"
+parity-scale-codec = { version = "3", default-features = false, features = ["derive"] }
+scale-info = { version = "2", default-features = false, features = ["derive"] }

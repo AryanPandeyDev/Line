@@ -1,0 +1,54 @@
+constructor {
+  /// Initialize the LINE token with metadata
+  New : (name: str, symbol: str, decimals: u8);
+};
+
+service Line {
+  /// Add a minter (only admin)
+  AddMinter : (minter: actor_id) -> null;
+  /// Mint tokens to an account (only minters)
+  Mint : (to: actor_id, value: u256) -> bool;
+  /// Remove a minter (only admin)
+  RemoveMinter : (minter: actor_id) -> null;
+  /// Transfer tokens to another account
+  Transfer : (to: actor_id, value: u256) -> bool;
+  /// Get all admins
+  query Admins : () -> vec actor_id;
+  /// Get the balance of an account
+  query BalanceOf : (account: actor_id) -> u256;
+  /// Get token decimals
+  query Decimals : () -> u8;
+  /// Check if an account is a minter
+  query IsMinter : (account: actor_id) -> bool;
+  /// Get all minters
+  query Minters : () -> vec actor_id;
+  /// Get token name
+  query Name : () -> str;
+  /// Get token symbol
+  query Symbol : () -> str;
+  /// Get total supply
+  query TotalSupply : () -> u256;
+
+  events {
+    /// Tokens transferred
+    Transfer: struct {
+      from: actor_id,
+      to: actor_id,
+      value: u256,
+    };
+    /// Tokens minted
+    Minted: struct {
+      to: actor_id,
+      value: u256,
+    };
+    /// Minter role granted
+    MinterAdded: struct {
+      minter: actor_id
+    };
+    /// Minter role revoked
+    MinterRemoved: struct {
+      minter: actor_id
+    };
+  }
+};
+

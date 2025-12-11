@@ -6,6 +6,7 @@ import { ClerkProvider } from "@clerk/nextjs"
 import { dark } from "@clerk/themes"
 import { ReduxProvider } from "@/lib/redux/provider"
 import { Toaster } from "@/components/ui/toaster"
+import { WalletConnectWrapper } from "@/components/modals/wallet-connect-wrapper"
 import "./globals.css"
 
 const orbitron = Orbitron({
@@ -73,6 +74,7 @@ export default function RootLayout({
           <ReduxProvider>
             {children}
             <Toaster />
+            <WalletConnectWrapper />
           </ReduxProvider>
           <Analytics />
         </body>

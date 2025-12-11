@@ -167,4 +167,25 @@ export const walletService = {
             lineBalance: wallet.lineBalance,
         }
     },
+
+    /**
+     * Get on-chain LINE token balance for a wallet address
+     * @param address - Wallet address in any format (hex, SS58)
+     * @returns Balance info with raw and human-readable values
+     */
+    getOnchainLineBalance: async (address: string): Promise<{ raw: string; human: number } | null> => {
+        try {
+            const response = await fetch(
+                `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/wallet/onchain-balance?address=${encodeURIComponent(address)}`
+            )
+            if (!response.ok) {
+                console.error('Failed to fetch on-chain balance:', await response.text())
+                return null
+            }
+            return await response.json()
+        } catch (error) {
+            console.error('Error fetching on-chain balance:', error)
+            return null
+        }
+    },
 }

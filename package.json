@@ -13,7 +13,10 @@
   "dependencies": {
     "@clerk/nextjs": "latest",
     "@clerk/themes": "latest",
+    "@gear-js/api": "^0.44.2",
     "@hookform/resolvers": "^3.10.0",
+    "@polkadot/util": "^14.0.1",
+    "@polkadot/util-crypto": "^14.0.1",
     "@prisma/adapter-pg": "^7.1.0",
     "@prisma/client": "^7.1.0",
     "@prisma/client-runtime-utils": "^7.1.0",

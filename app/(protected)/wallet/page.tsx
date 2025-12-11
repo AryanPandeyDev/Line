@@ -1,35 +1,89 @@
 "use client"
 
-import { useState } from "react"
-import { Wallet, ArrowUpRight, ArrowDownLeft, Copy, ExternalLink, TrendingUp, TrendingDown } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Wallet, ArrowUpRight, ArrowDownLeft, Copy, ExternalLink, AlertCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-
-const tokens = [
-  { name: "LINE Token", symbol: "LGC", balance: 15420, usdValue: 3084.0, change: 5.2 },
-  { name: "Ethereum", symbol: "ETH", balance: 2.45, usdValue: 5267.5, change: -1.8 },
-  { name: "Bonus Points", symbol: "BP", balance: 8750, usdValue: 87.5, change: 12.5 },
-]
-
-const transactions = [
-  { type: "receive", amount: 500, token: "LGC", from: "Daily Reward", time: "2 hours ago", status: "completed" },
-  { type: "send", amount: 0.1, token: "ETH", to: "NFT Purchase", time: "5 hours ago", status: "completed" },
-  { type: "receive", amount: 1200, token: "LGC", from: "Game Winnings", time: "1 day ago", status: "completed" },
-  { type: "send", amount: 2000, token: "BP", to: "NFT Bid", time: "2 days ago", status: "pending" },
-  { type: "receive", amount: 300, token: "LGC", from: "Referral Bonus", time: "3 days ago", status: "completed" },
-]
+import { useAppDispatch, useAppSelector } from "@/lib/redux/hooks"
+import {
+  selectWallet,
+  selectIsWalletConnected,
+  selectTransactionHistory,
+  fetchWalletState,
+} from "@/lib/redux/slices/wallet-slice"
+import { openModal } from "@/lib/redux/slices/ui-slice"
 
 export default function WalletPage() {
-  const [activeTab, setActiveTab] = useState<"tokens" | "history">("tokens")
-  const [withdrawAmount, setWithdrawAmount] = useState("")
-  const walletAddress = "0x1a2b3c4d5e6f7890abcdef1234567890abcdef12"
+  const dispatch = useAppDispatch()
+  const wallet = useAppSelector(selectWallet)
+  const isConnected = useAppSelector(selectIsWalletConnected)
+  const transactionHistory = useAppSelector(selectTransactionHistory)
 
-  const totalBalance = tokens.reduce((acc, token) => acc + token.usdValue, 0)
+  const [activeTab, setActiveTab] = useState<"tokens" | "history">("tokens")
+
+  // Fetch wallet state when connected - use either addressRaw or address
+  useEffect(() => {
+    if (isConnected) {
+      const address = wallet.addressRaw || wallet.address
+      if (address) {
+        dispatch(fetchWalletState(address))
+      }
+    }
+  }, [isConnected, wallet.addressRaw, wallet.address, dispatch])
+
+  // Build tokens array with real on-chain balances
+  const tokens = [
+    {
+      name: "LINE Token",
+      symbol: "LINE",
+      balance: wallet.lineBalance,
+      balanceRaw: wallet.lineRaw,
+    },
+    {
+      name: "VARA",
+      symbol: "VARA",
+      balance: wallet.varaBalance,
+    },
+  ]
+
+  const displayAddress = wallet.address || wallet.addressRaw
 
   const copyAddress = () => {
-    navigator.clipboard.writeText(walletAddress)
-    alert("Wallet address copied!")
+    if (displayAddress) {
+      navigator.clipboard.writeText(displayAddress)
+      alert("Wallet address copied!")
+    }
+  }
+
+  // Not connected state
+  if (!isConnected) {
+    return (
+      <div className="min-h-screen p-4 md:p-6">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold mb-2">Wallet</h1>
+          <p className="text-muted-foreground">Manage your tokens and transaction history</p>
+        </div>
+
+        <Card className="bg-card/50 border-border/50">
+          <CardContent className="p-8 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+              <Wallet className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <h3 className="text-xl font-semibold mb-2">No Wallet Connected</h3>
+            <p className="text-muted-foreground mb-6">
+              Connect your SubWallet to view balances and transactions
+            </p>
+            <Button
+              onClick={() => dispatch(openModal({ type: "wallet-connect" }))}
+              className="bg-primary hover:bg-primary/80"
+            >
+              Connect Wallet
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -45,42 +99,71 @@ export default function WalletPage() {
         <CardContent className="p-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
             <div>
-              <p className="text-sm text-muted-foreground mb-1">Total Balance</p>
-              <p className="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">
-                ${totalBalance.toLocaleString()}
-              </p>
-              <div className="flex items-center gap-2 mt-2">
-                <Badge className="bg-green-500/20 text-green-400 border-green-500/50">
-                  <TrendingUp className="w-3 h-3 mr-1" />
-                  +3.2%
-                </Badge>
-                <span className="text-sm text-muted-foreground">vs last week</span>
-              </div>
+              <p className="text-sm text-muted-foreground mb-1">VARA Balance</p>
+              {wallet.loadingWallet ? (
+                <div className="flex items-center gap-3">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  <span className="text-2xl text-muted-foreground">Loading...</span>
+                </div>
+              ) : (
+                <>
+                  <p className="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">
+                    {wallet.varaBalance.toFixed(4)} VARA
+                  </p>
+                  <div className="flex items-center gap-2 mt-3">
+                    <p className="text-lg font-semibold text-primary">
+                      {wallet.lineBalance.toLocaleString()} LINE
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-2 p-3 rounded-lg bg-background/50">
                 <Wallet className="w-5 h-5 text-primary" />
-                <span className="text-sm font-mono truncate max-w-[180px]">{walletAddress}</span>
-                <button onClick={copyAddress} className="p-1 hover:text-primary transition-colors">
+                <span className="text-sm font-mono truncate max-w-[200px]">
+                  {wallet.shortAddress || displayAddress}
+                </span>
+                <button
+                  onClick={copyAddress}
+                  className="p-1 hover:text-primary transition-colors"
+                  title="Copy address"
+                >
                   <Copy className="w-4 h-4" />
                 </button>
-                <button className="p-1 hover:text-primary transition-colors">
+                <a
+                  href={`https://idea.gear-tech.io/explorer/${wallet.addressRaw || displayAddress}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1 hover:text-primary transition-colors"
+                  title="View on explorer"
+                >
                   <ExternalLink className="w-4 h-4" />
-                </button>
+                </a>
               </div>
 
               <div className="flex gap-2">
-                <Button className="flex-1 bg-primary hover:bg-primary/80">
+                <Button
+                  className="flex-1 bg-primary hover:bg-primary/80 relative group"
+                  disabled
+                >
                   <ArrowDownLeft className="w-4 h-4 mr-2" />
                   Deposit
+                  <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-background border border-border px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                    Coming Soon
+                  </span>
                 </Button>
                 <Button
                   variant="outline"
-                  className="flex-1 border-secondary text-secondary hover:bg-secondary/10 bg-transparent"
+                  className="flex-1 border-secondary text-secondary hover:bg-secondary/10 bg-transparent relative group"
+                  disabled
                 >
                   <ArrowUpRight className="w-4 h-4 mr-2" />
                   Withdraw
+                  <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-background border border-border px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                    Coming Soon
+                  </span>
                 </Button>
               </div>
             </div>
@@ -88,17 +171,23 @@ export default function WalletPage() {
         </CardContent>
       </Card>
 
+      {/* Loading indicator */}
+      {wallet.loadingWallet && (
+        <div className="mb-4 p-3 rounded-lg bg-muted/50 text-center text-sm text-muted-foreground">
+          Refreshing balances...
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="flex gap-2 mb-6">
         {(["tokens", "history"] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-6 py-2 rounded-full font-medium transition-all capitalize ${
-              activeTab === tab
-                ? "bg-primary text-primary-foreground shadow-neon-primary"
-                : "bg-card/50 text-muted-foreground hover:bg-card"
-            }`}
+            className={`px-6 py-2 rounded-full font-medium transition-all capitalize ${activeTab === tab
+              ? "bg-primary text-primary-foreground shadow-neon-primary"
+              : "bg-card/50 text-muted-foreground hover:bg-card"
+              }`}
           >
             {tab}
           </button>
@@ -122,22 +211,16 @@ export default function WalletPage() {
                   </div>
 
                   <div className="text-right">
-                    <p className="font-bold text-lg">
-                      {token.balance.toLocaleString()} {token.symbol}
-                    </p>
-                    <div className="flex items-center justify-end gap-2">
-                      <span className="text-sm text-muted-foreground">${token.usdValue.toLocaleString()}</span>
-                      <span
-                        className={`text-sm flex items-center ${token.change >= 0 ? "text-green-400" : "text-red-400"}`}
-                      >
-                        {token.change >= 0 ? (
-                          <TrendingUp className="w-3 h-3 mr-1" />
-                        ) : (
-                          <TrendingDown className="w-3 h-3 mr-1" />
-                        )}
-                        {Math.abs(token.change)}%
-                      </span>
-                    </div>
+                    {wallet.loadingWallet ? (
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                        <span className="text-muted-foreground">Loading...</span>
+                      </div>
+                    ) : (
+                      <p className="font-bold text-lg">
+                        {token.balance.toLocaleString(undefined, { maximumFractionDigits: 4 })} {token.symbol}
+                      </p>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -146,49 +229,62 @@ export default function WalletPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {transactions.map((tx, index) => (
-            <Card key={index} className="bg-card/50 border-border/50">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div
-                      className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                        tx.type === "receive" ? "bg-green-500/20 text-green-400" : "bg-orange-500/20 text-orange-400"
-                      }`}
-                    >
-                      {tx.type === "receive" ? (
-                        <ArrowDownLeft className="w-5 h-5" />
-                      ) : (
-                        <ArrowUpRight className="w-5 h-5" />
-                      )}
-                    </div>
-                    <div>
-                      <p className="font-medium capitalize">
-                        {tx.type === "receive" ? `From: ${tx.from}` : `To: ${tx.to}`}
-                      </p>
-                      <p className="text-sm text-muted-foreground">{tx.time}</p>
-                    </div>
-                  </div>
-
-                  <div className="text-right">
-                    <p className={`font-bold ${tx.type === "receive" ? "text-green-400" : "text-foreground"}`}>
-                      {tx.type === "receive" ? "+" : "-"}
-                      {tx.amount} {tx.token}
-                    </p>
-                    <Badge
-                      className={
-                        tx.status === "completed"
-                          ? "bg-green-500/20 text-green-400 border-green-500/50"
-                          : "bg-yellow-500/20 text-yellow-400 border-yellow-500/50"
-                      }
-                    >
-                      {tx.status}
-                    </Badge>
-                  </div>
-                </div>
+          {transactionHistory.length === 0 ? (
+            <Card className="bg-card/50 border-border/50">
+              <CardContent className="p-8 text-center">
+                <AlertCircle className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                <h3 className="text-lg font-semibold mb-2">No Transactions Yet</h3>
+                <p className="text-muted-foreground">
+                  Your transaction history will appear here once you start using LINE tokens.
+                </p>
               </CardContent>
             </Card>
-          ))}
+          ) : (
+            transactionHistory.map((tx) => (
+              <Card key={tx.id} className="bg-card/50 border-border/50">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div
+                        className={`w-10 h-10 rounded-full flex items-center justify-center ${tx.type === "receive" ? "bg-green-500/20 text-green-400" : "bg-orange-500/20 text-orange-400"
+                          }`}
+                      >
+                        {tx.type === "receive" ? (
+                          <ArrowDownLeft className="w-5 h-5" />
+                        ) : (
+                          <ArrowUpRight className="w-5 h-5" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-medium capitalize">
+                          {tx.type === "receive" ? `From: ${tx.from}` : `To: ${tx.to}`}
+                        </p>
+                        <p className="text-sm text-muted-foreground">{tx.timestamp}</p>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <p className={`font-bold ${tx.type === "receive" ? "text-green-400" : "text-foreground"}`}>
+                        {tx.type === "receive" ? "+" : "-"}
+                        {tx.amount} {tx.token}
+                      </p>
+                      <Badge
+                        className={
+                          tx.status === "confirmed"
+                            ? "bg-green-500/20 text-green-400 border-green-500/50"
+                            : tx.status === "pending"
+                              ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/50"
+                              : "bg-red-500/20 text-red-400 border-red-500/50"
+                        }
+                      >
+                        {tx.status}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )}
         </div>
       )}
     </div>

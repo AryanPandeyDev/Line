@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react"
 import { useAppDispatch } from "@/lib/redux/hooks"
 import { fetchUserProfile } from "@/lib/redux/slices/auth-slice"
+import { fetchWallet } from "@/lib/redux/slices/wallet-slice"
 
 interface AuthProviderProps {
     children: ReactNode
@@ -13,10 +14,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const [isInitializing, setIsInitializing] = useState(true)
 
     useEffect(() => {
-        // Fetch user profile on mount for protected routes
-        dispatch(fetchUserProfile()).finally(() => {
-            setIsInitializing(false)
-        })
+        // Fetch user profile FIRST (creates user if not exists), then wallet state
+        dispatch(fetchUserProfile())
+            .then(() => dispatch(fetchWallet()))
+            .finally(() => {
+                setIsInitializing(false)
+            })
     }, [dispatch])
 
     // Only show loading during initial fetch
@@ -33,4 +36,3 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     return <>{children}</>
 }
-

@@ -79,7 +79,7 @@ export const tokenService = {
         const currentStreak = streak?.currentStreak || 0
         const nextDay = canClaimToday ? (currentStreak % 7) + 1 : ((currentStreak % 7) + 1)
         const nextReward = streakRewards.find((sr) => sr.day === nextDay)
-        const nextRewardAmount = nextReward?.reward || 50 + (nextDay - 1) * 25
+        const nextRewardAmount = nextReward?.reward || 1 // Default to 1 if not found in DB
 
         return {
             balance: user.tokenBalance,

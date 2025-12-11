@@ -82,6 +82,17 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Invalid action" }, { status: 400 })
     } catch (error) {
         console.error("Error processing wallet action:", error)
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+        // Return more specific error message for debugging
+        const errorMessage = error instanceof Error ? error.message : "Unknown error"
+        console.error("Detailed wallet error:", {
+            name: error instanceof Error ? error.name : "Unknown",
+            message: errorMessage,
+            stack: error instanceof Error ? error.stack : undefined,
+        })
+        return NextResponse.json({
+            error: process.env.NODE_ENV === "development"
+                ? `Wallet error: ${errorMessage}`
+                : "Internal server error"
+        }, { status: 500 })
     }
 }

@@ -59,22 +59,28 @@ export function calculateGameReward(
  * Calculate streak reward for a specific day
  * 7-day cycle with bonus on day 7
  * 
- * Day 1: 50 tokens
- * Day 2: 75 tokens
- * Day 3: 100 tokens
- * Day 4: 125 tokens
- * Day 5: 150 tokens
- * Day 6: 175 tokens
- * Day 7: 300 tokens (bonus day)
+ * Day 1: 1 token
+ * Day 2: 1 token
+ * Day 3: 1 token
+ * Day 4: 2 tokens
+ * Day 5: 2 tokens
+ * Day 6: 3 tokens
+ * Day 7: 5 tokens (bonus day)
  */
 export function calculateStreakReward(streakDay: number): number {
     const dayInCycle = ((streakDay - 1) % 7) + 1
 
-    if (dayInCycle === 7) {
-        return 300 // Day 7 bonus
+    const rewards: Record<number, number> = {
+        1: 1,
+        2: 1,
+        3: 1,
+        4: 2,
+        5: 2,
+        6: 3,
+        7: 5,
     }
 
-    return 25 + dayInCycle * 25
+    return rewards[dayInCycle] ?? 1
 }
 
 /**

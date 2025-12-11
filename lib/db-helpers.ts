@@ -68,9 +68,9 @@ export async function getUserByClerkId(
                 level: 1,
                 xp: 0,
                 xpToNextLevel: 1000,
-                tokenBalance: 500, // Welcome bonus
+                tokenBalance: 0,
                 bonusPoints: 0,
-                totalEarned: 500,
+                totalEarned: 0,
             },
         })
 
@@ -94,16 +94,7 @@ export async function getUserByClerkId(
                     claimedDays: [],
                 },
             }),
-            // Record welcome bonus transaction
-            db.tokenTransaction.create({
-                data: {
-                    userId: user.id,
-                    type: "EARN",
-                    amount: 500,
-                    balance: 500,
-                    source: "Welcome Bonus",
-                },
-            }),
+
         ])
     }
 
@@ -140,6 +131,15 @@ export async function getOrCreateWallet(
     userId: string,
     address: string
 ): Promise<Wallet> {
+    // Check if this address is already connected to a different user
+    const existingWalletWithAddress = await db.wallet.findUnique({
+        where: { address },
+    })
+
+    if (existingWalletWithAddress && existingWalletWithAddress.userId !== userId) {
+        throw new Error("This wallet address is already connected to another account. Please use a different wallet.")
+    }
+
     let wallet = await db.wallet.findUnique({
         where: { userId },
     })
@@ -156,8 +156,8 @@ export async function getOrCreateWallet(
                 connectedAt: new Date(),
             },
         })
-    } else if (wallet.address !== address) {
-        // Update address if changed
+    } else {
+        // Always update to connected state and update address
         wallet = await db.wallet.update({
             where: { id: wallet.id },
             data: {
@@ -295,7 +295,7 @@ export async function claimDailyStreak(userId: string) {
     // Get streak reward config
     const nextDay = isConsecutive ? (streak.currentStreak % 7) + 1 : 1
     const rewardConfig = await db.streakReward.findUnique({ where: { day: nextDay } })
-    const rewardAmount = rewardConfig?.reward || 50 + (nextDay - 1) * 25
+    const rewardAmount = rewardConfig?.reward || 1 // Default to 1 if not found in DB
 
     // Update streak
     const newStreak = isConsecutive ? streak.currentStreak + 1 : 1

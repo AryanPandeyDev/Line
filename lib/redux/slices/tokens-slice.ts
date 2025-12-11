@@ -29,7 +29,7 @@ const initialState: TokensState = {
   transactions: [],
   dailyClaimAvailable: false,
   walletConnected: false,
-  nextRewardAmount: 50,
+  nextRewardAmount: 1,
   currentStreak: 0,
   lastClaimDate: null,
   isLoading: false,
@@ -99,7 +99,7 @@ const tokensSlice = createSlice({
         state.balance = action.payload.balance
         state.totalEarned = action.payload.totalEarned ?? 0
         state.walletConnected = action.payload.walletConnected ?? false
-        state.nextRewardAmount = action.payload.nextRewardAmount ?? 50
+        state.nextRewardAmount = action.payload.nextRewardAmount ?? 1
         state.currentStreak = action.payload.currentStreak ?? 0
         state.dailyClaimAvailable = action.payload.dailyClaimAvailable
         state.transactions = action.payload.history?.map((h: { type: string; amount: number; source: string; timestamp: string }, i: number) => ({
