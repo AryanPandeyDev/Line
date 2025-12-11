@@ -94,9 +94,9 @@ export function getCommissionRateForTier(tier: number): number {
 export function getTierBonusReward(tier: number): number {
     const bonuses: Record<number, number> = {
         1: 0,
-        2: 500,
-        3: 1000,
-        4: 2500,
+        2: 10,
+        3: 20,
+        4: 50,
     }
     return bonuses[tier] ?? 0
 }

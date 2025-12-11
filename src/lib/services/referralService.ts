@@ -27,10 +27,10 @@ import { getUserByClerkId } from '@/lib/db-helpers'
 
 // Default tiers if none in database
 const DEFAULT_TIERS = [
-    { tier: 1, referrals: 5, reward: 500, bonus: '5% commission' },
-    { tier: 2, referrals: 15, reward: 2000, bonus: '7% commission' },
-    { tier: 3, referrals: 50, reward: 10000, bonus: '10% commission' },
-    { tier: 4, referrals: 100, reward: 50000, bonus: '15% commission + NFT' },
+    { tier: 1, referrals: 5, reward: 10, bonus: '5% commission' },
+    { tier: 2, referrals: 15, reward: 25, bonus: '7% commission' },
+    { tier: 3, referrals: 50, reward: 50, bonus: '10% commission' },
+    { tier: 4, referrals: 100, reward: 100, bonus: '15% commission + NFT' },
 ]
 
 export interface ReferralInfoResponse {

@@ -115,9 +115,9 @@ describe('referralLogic', () => {
     describe('getTierBonusReward', () => {
         it('returns correct bonuses for each tier', () => {
             expect(getTierBonusReward(1)).toBe(0)
-            expect(getTierBonusReward(2)).toBe(500)
-            expect(getTierBonusReward(3)).toBe(1000)
-            expect(getTierBonusReward(4)).toBe(2500)
+            expect(getTierBonusReward(2)).toBe(10)
+            expect(getTierBonusReward(3)).toBe(20)
+            expect(getTierBonusReward(4)).toBe(50)
         })
     })
 
@@ -126,7 +126,7 @@ describe('referralLogic', () => {
             const result = checkTierUpgradeEligibility(1, 20)
             expect(result.eligible).toBe(true)
             expect(result.newTier).toBe(2)
-            expect(result.bonus).toBe(500)
+            expect(result.bonus).toBe(10)
         })
 
         it('returns not eligible when no upgrade', () => {
@@ -140,7 +140,7 @@ describe('referralLogic', () => {
             const result = checkTierUpgradeEligibility(1, 100)
             expect(result.eligible).toBe(true)
             expect(result.newTier).toBe(4)
-            expect(result.bonus).toBe(2500)
+            expect(result.bonus).toBe(50)
         })
     })
 

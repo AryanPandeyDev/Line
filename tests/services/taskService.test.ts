@@ -41,7 +41,7 @@ function createMockTask(overrides = {}) {
         description: 'Complete the test',
         type: 'DAILY',
         icon: '🎯',
-        reward: 100,
+        reward: 3,
         xpReward: 50,
         externalUrl: null,
         targetProgress: 1,
@@ -148,7 +148,7 @@ describe('taskService', () => {
             const result = await taskService.getTasks('clerk-123')
 
             expect(result?.streak.rewards).toHaveLength(7)
-            expect(result?.streak.rewards[0]).toEqual({ day: 1, reward: 50, claimed: false })
+            expect(result?.streak.rewards[0]).toEqual({ day: 1, reward: 1, claimed: false })
         })
     })
 
@@ -226,9 +226,9 @@ describe('taskService', () => {
 
             const result = await taskService.claimTaskReward('clerk-123', 'task-1')
 
-            expect(mocks.addTokensToUser).toHaveBeenCalledWith('user-123', 100, 'Task: Test Task', 'EARN')
+            expect(mocks.addTokensToUser).toHaveBeenCalledWith('user-123', 3, 'Task: Test Task', 'EARN')
             expect(mocks.addXPToUser).toHaveBeenCalledWith('user-123', 50)
-            expect(result).toMatchObject({ success: true, reward: 100 })
+            expect(result).toMatchObject({ success: true, reward: 3 })
         })
     })
 

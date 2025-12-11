@@ -243,10 +243,10 @@ export default function ReferralPage() {
                 <div
                   key={tier.tier}
                   className={`p-4 rounded-xl border transition-all ${tier.unlocked
-                      ? "bg-primary/10 border-primary/50"
-                      : index === tierProgress.currentTierIndex
-                        ? "bg-gradient-to-br from-primary/20 to-secondary/20 border-primary shadow-neon-primary"
-                        : "bg-card/30 border-border/50 opacity-60"
+                    ? "bg-primary/10 border-primary/50"
+                    : index === tierProgress.currentTierIndex
+                      ? "bg-gradient-to-br from-primary/20 to-secondary/20 border-primary shadow-neon-primary"
+                      : "bg-card/30 border-border/50 opacity-60"
                     }`}
                 >
                   <div className="flex items-center gap-2 mb-2">
@@ -265,16 +265,16 @@ export default function ReferralPage() {
               // Default tiers if none in database
               <>
                 {[
-                  { tier: 1, referrals: 5, reward: 500, bonus: "5% commission" },
-                  { tier: 2, referrals: 15, reward: 2000, bonus: "7% commission" },
-                  { tier: 3, referrals: 50, reward: 10000, bonus: "10% commission" },
-                  { tier: 4, referrals: 100, reward: 50000, bonus: "15% commission + NFT" },
+                  { tier: 1, referrals: 5, reward: 10, bonus: "5% commission" },
+                  { tier: 2, referrals: 15, reward: 25, bonus: "7% commission" },
+                  { tier: 3, referrals: 50, reward: 50, bonus: "10% commission" },
+                  { tier: 4, referrals: 100, reward: 100, bonus: "15% commission + NFT" },
                 ].map((tier, index) => (
                   <div
                     key={tier.tier}
                     className={`p-4 rounded-xl border transition-all ${stats.totalReferrals >= tier.referrals
-                        ? "bg-primary/10 border-primary/50"
-                        : "bg-card/30 border-border/50 opacity-60"
+                      ? "bg-primary/10 border-primary/50"
+                      : "bg-card/30 border-border/50 opacity-60"
                       }`}
                   >
                     <div className="flex items-center gap-2 mb-2">

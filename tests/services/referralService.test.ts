@@ -83,10 +83,10 @@ function createMockReferralStats(overrides = {}) {
 
 function createMockReferralTier(tier: number, overrides = {}) {
     const defaults: Record<number, { requiredReferrals: number; reward: number; commissionRate: number }> = {
-        1: { requiredReferrals: 5, reward: 500, commissionRate: 0.05 },
-        2: { requiredReferrals: 15, reward: 2000, commissionRate: 0.07 },
-        3: { requiredReferrals: 50, reward: 10000, commissionRate: 0.10 },
-        4: { requiredReferrals: 100, reward: 50000, commissionRate: 0.15 },
+        1: { requiredReferrals: 5, reward: 10, commissionRate: 0.05 },
+        2: { requiredReferrals: 15, reward: 25, commissionRate: 0.07 },
+        3: { requiredReferrals: 50, reward: 50, commissionRate: 0.10 },
+        4: { requiredReferrals: 100, reward: 100, commissionRate: 0.15 },
     }
     return {
         id: `tier-${tier}`,

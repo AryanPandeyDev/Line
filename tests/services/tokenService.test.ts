@@ -47,8 +47,8 @@ function createMockDataBundle(overrides = {}) {
         streak: null,
         walletConnected: true,
         streakRewards: [
-            { day: 1, reward: 50 },
-            { day: 2, reward: 75 },
+            { day: 1, reward: 1 },
+            { day: 2, reward: 1 },
         ],
         ...overrides,
     }
@@ -146,7 +146,7 @@ describe('tokenService', () => {
         it('claims reward successfully', async () => {
             mocks.getUserByClerkId.mockResolvedValue(createMockUser())
             mocks.tokenRepo.isWalletConnected.mockResolvedValue(true)
-            mocks.claimDailyStreak.mockResolvedValue({ day: 3, reward: 100, currentStreak: 3 })
+            mocks.claimDailyStreak.mockResolvedValue({ day: 3, reward: 1, currentStreak: 3 })
             mocks.db.user.findUnique.mockResolvedValue({ tokenBalance: 1100 })
 
             const result = await tokenService.claimDailyReward('clerk-123')

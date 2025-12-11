@@ -26,13 +26,13 @@ import { getUserByClerkId, addTokensToUser, addXPToUser } from '@/lib/db-helpers
 
 // Default streak rewards
 const DEFAULT_STREAK_REWARDS = [
-    { day: 1, reward: 50 },
-    { day: 2, reward: 75 },
-    { day: 3, reward: 100 },
-    { day: 4, reward: 125 },
-    { day: 5, reward: 150 },
-    { day: 6, reward: 200 },
-    { day: 7, reward: 300 },
+    { day: 1, reward: 1 },
+    { day: 2, reward: 1 },
+    { day: 3, reward: 1 },
+    { day: 4, reward: 2 },
+    { day: 5, reward: 2 },
+    { day: 6, reward: 3 },
+    { day: 7, reward: 5 },
 ]
 
 export interface TasksResponse {
@@ -96,7 +96,7 @@ export const taskService = {
                 name: t.name,
                 description: t.description,
                 type: t.type,
-                icon: t.icon,
+                icon: t.icon || '',
                 reward: t.reward,
                 xpReward: t.xpReward,
                 externalUrl: t.externalUrl,

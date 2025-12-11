@@ -35,6 +35,49 @@ LINE is a **Web3 gaming platform** that combines traditional gaming experiences 
 
 ---
 
+## ⚠️ Current Implementation Status
+
+> [!IMPORTANT]
+> While the backend infrastructure is robust and production-ready, parts of the frontend currently rely on **mock data** for demonstration purposes.
+
+### ✅ Real Data & Logic
+The following features are fully connected to the backend and blockchain:
+- **Authentication**: Full Clerk integration with database syncing.
+- **User Profile**: Real-time stats (Level, XP, Balance) fetched from PostgreSQL via Redux.
+- **User Profile**: Real-time stats (Level, XP, Balance) fetched from PostgreSQL via Redux.
+- **Token System**: Internal logic for earning/spending LINE tokens is implemented in `db-helpers.ts` (Database-only, no on-chain tokens).
+
+### 🚧 Mock Data & Static UI
+The following features are currently **static** or use **mock data**:
+- **Games Page**: Uses `mockGames` array. Gameplay does not yet trigger real backend transactions.
+- **NFT Marketplace**: Uses `mockNFTs` array. Listings and bids are simulated on the client side.
+- **Dashboard**: "Featured NFTs" and "Quick Actions" are placeholders and do not reflect real database state.
+- **Wallet Connection**: **Simulated**. No actual blockchain interaction or smart contract deployment exists yet. Addresses are mocked.
+
+### 🛠 Work Needed / Logic Gaps
+To bring the platform to full functionality, the following connections need to be made:
+
+1.  **Games Integration**:
+    - Connect `GamesPage` to `/api/games` to fetch real game data.
+    - Implement `POST /api/games/progress` to record actual gameplay sessions and award tokens/XP.
+
+2.  **NFT Marketplace Integration**:
+    - Connect `NFTMarketPage` to `/api/nfts`.
+    - Replace client-side bidding with real database transactions (`NFTBid` model).
+    - Implement the "Buy Now" flow using `WalletTransaction` and `TokenTransaction`.
+
+3.  **Dashboard Wiring**:
+    - Fetch "Featured NFTs" from the `NFTListing` table (e.g., top viewed/liked).
+    - Fetch "Featured NFTs" from the `NFTListing` table (e.g., top viewed/liked).
+    - Make "Quick Actions" dynamic based on user state (e.g., only show "Claim Daily Reward" if not yet claimed).
+
+4.  **Blockchain Integration (Critical)**:
+    - Implement real Vara Network connection using `@gear-js/api` and `@polkadot/extension-dapp`.
+    - Deploy actual smart contracts for Tokens (VARA standard) and NFTs.
+    - Replace simulated wallet logic in `wallet-slice.ts` with real chain interactions.
+
+---
+
 ## 🛠 Technology Stack
 
 ### Frontend
@@ -56,15 +99,19 @@ LINE is a **Web3 gaming platform** that combines traditional gaming experiences 
 - **ORM**: Prisma 7.1.0 with PostgreSQL adapter
 - **Connection Pooling**: `@prisma/adapter-pg` with `pg` driver
 
-### Blockchain
-- **Network**: Vara Network (Testnet & Mainnet support)
-- **Token Types**: VARA (native) & LINE (platform token)
+### Blockchain (Planned)
+- **Network**: Vara Network (Testnet & Mainnet support planned)
+- **Token Types**: VARA (native) & LINE (platform token - currently DB only)
 
 ### Development Tools
 - **Package Manager**: npm/pnpm
 - **Linting**: ESLint
 - **Analytics**: Vercel Analytics
 - **Notifications**: Sonner (toast notifications)
+
+### Testing
+- **Unit & Integration**: Vitest
+- **Coverage**: v8
 
 ---
 
@@ -129,9 +176,12 @@ Line/
 ├── public/                       # Static assets
 ├── styles/                       # Additional styles
 ├── hooks/                        # Custom React hooks
+├── tests/                        # Unit & Integration tests
+├── docs/                         # Documentation
 ├── middleware.ts                 # Clerk authentication middleware
 ├── next.config.mjs               # Next.js configuration
 ├── tsconfig.json                 # TypeScript configuration
+├── vitest.config.ts              # Vitest configuration
 ├── postcss.config.mjs            # PostCSS configuration
 ├── package.json                  # Dependencies
 └── .env                          # Environment variables
@@ -244,7 +294,10 @@ User notifications.
 
 ---
 
-## 🔄 Data Flow Architecture
+## 🏗️ Architecture & Data Flow
+
+> [!NOTE]
+> This section describes the **target architecture**. See [Current Implementation Status](#%EF%B8%8F-current-implementation-status) for what is currently live.
 
 ### 1. **Client-Side Flow**
 
@@ -326,7 +379,7 @@ Return user data to client
 Redux stores user state
 ```
 
-### 5. **Game Play Flow**
+### 5. **Game Play Flow (In Development)**
 
 ```
 User plays game
@@ -373,7 +426,7 @@ Database transaction:
 Return success
 ```
 
-### 7. **NFT Purchase Flow**
+### 7. **NFT Purchase Flow (In Development)**
 
 ```
 User views NFT listing
@@ -397,14 +450,14 @@ Return updated NFT ownership
 Update Redux NFT state
 ```
 
-### 8. **Wallet Connection Flow**
+### 8. **Wallet Connection Flow (Simulated)**
 
 ```
 User clicks "Connect Wallet"
     ↓
-Frontend initiates Vara Network connection
+Frontend initiates simulated connection (timeout)
     ↓
-User approves in wallet
+Generates mock address
     ↓
 POST /api/wallet (action: connect)
     ↓
@@ -542,7 +595,7 @@ dispatch(fetchUserData())
 - Recent activity feed
 - Quick actions (play games, complete tasks)
 
-### 2. **Games**
+### 2. **Games (Coming Soon)**
 - Game catalog with categories and filters
 - Game details with screenshots and ratings
 - Play tracking with rewards
@@ -553,16 +606,16 @@ dispatch(fetchUserData())
 - Achievement-based tasks
 - Onboarding tasks for new users
 
-### 4. **NFT Marketplace**
+### 4. **NFT Marketplace (UI Only)**
 - Browse NFT collections
 - Filter by rarity, price, collection
 - Bid on listings or buy instantly
 - List owned NFTs for sale
 
-### 5. **Wallet**
-- Connect Vara Network wallet
-- View VARA and LINE balances
-- Transaction history
+### 5. **Wallet (Simulated)**
+- Connect Vara Network wallet (UI Demo)
+- View VARA and LINE balances (Mocked)
+- Transaction history (Mocked)
 - Send/receive tokens
 
 ### 6. **Profile**
