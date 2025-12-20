@@ -15,11 +15,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     useEffect(() => {
         // Fetch user profile FIRST (creates user if not exists), then wallet state
-        dispatch(fetchUserProfile())
-            .then(() => dispatch(fetchWallet()))
-            .finally(() => {
+        const initializeAuth = async () => {
+            try {
+                await dispatch(fetchUserProfile()).unwrap()
+                await dispatch(fetchWallet()).unwrap()
+            } catch {
+                // User might not be authenticated, that's okay
+            } finally {
                 setIsInitializing(false)
-            })
+            }
+        }
+        initializeAuth()
     }, [dispatch])
 
     // Only show loading during initial fetch

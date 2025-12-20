@@ -6,10 +6,11 @@ import Link from "next/link"
 import { Coins, Trophy, Gamepad2, ImageIcon, Clock, TrendingUp, ChevronRight, Wallet } from "lucide-react"
 import { NeonCard } from "@/components/ui/neon-card"
 import { NeonButton } from "@/components/ui/neon-button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useAppSelector, useAppDispatch } from "@/lib/redux/hooks"
-import { selectUser, selectTotalPlayTimeHours, fetchUserProfile } from "@/lib/redux/slices/auth-slice"
-import { selectTokenBalance, selectTotalEarned, fetchTokens } from "@/lib/redux/slices/tokens-slice"
-import { selectUnlockedAchievements, selectAchievements, fetchAchievements } from "@/lib/redux/slices/achievements-slice"
+import { selectUser, selectTotalPlayTimeHours, selectAuthLoading, fetchUserProfile } from "@/lib/redux/slices/auth-slice"
+import { selectTokenBalance, selectTotalEarned, selectTokensLoading, fetchTokens } from "@/lib/redux/slices/tokens-slice"
+import { selectUnlockedAchievements, selectAchievements, selectAchievementsLoading, fetchAchievements } from "@/lib/redux/slices/achievements-slice"
 import { selectInventory } from "@/lib/redux/slices/nfts-slice"
 import { selectIsWalletConnected, selectShortAddress, fetchWallet } from "@/lib/redux/slices/wallet-slice"
 import { openModal } from "@/lib/redux/slices/ui-slice"
@@ -44,6 +45,12 @@ export default function DashboardPage() {
   const shortAddress = useAppSelector(selectShortAddress)
   const totalPlayTimeHours = useAppSelector(selectTotalPlayTimeHours)
 
+  // Loading states
+  const authLoading = useAppSelector(selectAuthLoading)
+  const tokensLoading = useAppSelector(selectTokensLoading)
+  const achievementsLoading = useAppSelector(selectAchievementsLoading)
+  const isLoading = authLoading || tokensLoading || achievementsLoading
+
   // Fetch user data on mount
   useEffect(() => {
     dispatch(fetchUserProfile())
@@ -56,12 +63,22 @@ export default function DashboardPage() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Welcome Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold mb-1">
-            Welcome back, <span className="neon-text-cyan">{user?.displayName || "Player"}</span>
-          </h1>
-          <p className="text-muted-foreground">Here{"'"}s your gaming overview</p>
-        </div>
+        {authLoading ? (
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Skeleton className="h-8 w-32" />
+              <Skeleton className="h-8 w-24" />
+            </div>
+            <Skeleton className="h-4 w-48" />
+          </div>
+        ) : (
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold mb-1">
+              Welcome back, <span className="neon-text-cyan">{user?.displayName || "Player"}</span>
+            </h1>
+            <p className="text-muted-foreground">Here{"'"}s your gaming overview</p>
+          </div>
+        )}
 
         {/* Wallet Status */}
         <NeonButton
@@ -75,70 +92,119 @@ export default function DashboardPage() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <NeonCard className="p-5" glowColor="cyan">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-xl bg-neon-cyan/10 flex items-center justify-center">
-              <Coins className="w-5 h-5 text-neon-cyan" />
+        {tokensLoading ? (
+          <NeonCard className="p-5">
+            <Skeleton className="h-10 w-10 rounded-xl mb-3" />
+            <Skeleton className="h-8 w-24 mb-1" />
+            <Skeleton className="h-3 w-16" />
+          </NeonCard>
+        ) : (
+          <NeonCard className="p-5" glowColor="cyan">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl bg-neon-cyan/10 flex items-center justify-center">
+                <Coins className="w-5 h-5 text-neon-cyan" />
+              </div>
             </div>
-          </div>
-          <p className="text-2xl sm:text-3xl font-bold text-neon-cyan">{tokenBalance.toLocaleString()}</p>
-          <p className="text-xs text-muted-foreground">LINE Balance</p>
-        </NeonCard>
+            <p className="text-2xl sm:text-3xl font-bold text-neon-cyan">{tokenBalance.toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground">LINE Balance</p>
+          </NeonCard>
+        )}
 
-        <NeonCard className="p-5" glowColor="magenta">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-xl bg-neon-magenta/10 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-neon-magenta" />
+        {tokensLoading ? (
+          <NeonCard className="p-5">
+            <Skeleton className="h-10 w-10 rounded-xl mb-3" />
+            <Skeleton className="h-8 w-24 mb-1" />
+            <Skeleton className="h-3 w-16" />
+          </NeonCard>
+        ) : (
+          <NeonCard className="p-5" glowColor="magenta">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl bg-neon-magenta/10 flex items-center justify-center">
+                <TrendingUp className="w-5 h-5 text-neon-magenta" />
+              </div>
             </div>
-          </div>
-          <p className="text-2xl sm:text-3xl font-bold text-neon-magenta">{totalEarned.toLocaleString()}</p>
-          <p className="text-xs text-muted-foreground">Total Earned</p>
-        </NeonCard>
+            <p className="text-2xl sm:text-3xl font-bold text-neon-magenta">{totalEarned.toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground">Total Earned</p>
+          </NeonCard>
+        )}
 
-        <NeonCard className="p-5" glowColor="purple">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-xl bg-neon-purple/10 flex items-center justify-center">
-              <Trophy className="w-5 h-5 text-neon-purple" />
+        {achievementsLoading ? (
+          <NeonCard className="p-5">
+            <Skeleton className="h-10 w-10 rounded-xl mb-3" />
+            <Skeleton className="h-8 w-16 mb-1" />
+            <Skeleton className="h-3 w-20" />
+          </NeonCard>
+        ) : (
+          <NeonCard className="p-5" glowColor="purple">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl bg-neon-purple/10 flex items-center justify-center">
+                <Trophy className="w-5 h-5 text-neon-purple" />
+              </div>
             </div>
-          </div>
-          <p className="text-2xl sm:text-3xl font-bold text-neon-purple">
-            {unlockedAchievements.length}/{allAchievements.length}
-          </p>
-          <p className="text-xs text-muted-foreground">Achievements</p>
-        </NeonCard>
+            <p className="text-2xl sm:text-3xl font-bold text-neon-purple">
+              {unlockedAchievements.length}/{allAchievements.length}
+            </p>
+            <p className="text-xs text-muted-foreground">Achievements</p>
+          </NeonCard>
+        )}
 
-        <NeonCard className="p-5" glowColor="cyan">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-xl bg-neon-green/10 flex items-center justify-center">
-              <ImageIcon className="w-5 h-5 text-neon-green" />
+        {authLoading ? (
+          <NeonCard className="p-5">
+            <Skeleton className="h-10 w-10 rounded-xl mb-3" />
+            <Skeleton className="h-8 w-12 mb-1" />
+            <Skeleton className="h-3 w-16" />
+          </NeonCard>
+        ) : (
+          <NeonCard className="p-5" glowColor="cyan">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl bg-neon-green/10 flex items-center justify-center">
+                <ImageIcon className="w-5 h-5 text-neon-green" />
+              </div>
             </div>
-          </div>
-          <p className="text-2xl sm:text-3xl font-bold text-neon-green">{inventory.length}</p>
-          <p className="text-xs text-muted-foreground">NFTs Owned</p>
-        </NeonCard>
+            <p className="text-2xl sm:text-3xl font-bold text-neon-green">{inventory.length}</p>
+            <p className="text-xs text-muted-foreground">NFTs Owned</p>
+          </NeonCard>
+        )}
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Playtime Chart */}
-        <NeonCard className="lg:col-span-2 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <Clock className="w-5 h-5 text-primary" />
-              <h2 className="font-bold">Total Playtime</h2>
+        {authLoading ? (
+          <NeonCard className="lg:col-span-2 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-5 w-5 rounded" />
+                <Skeleton className="h-5 w-28" />
+              </div>
+              <Skeleton className="h-4 w-24" />
             </div>
-            <span className="text-sm text-muted-foreground">{totalPlayTimeHours} hours played</span>
-          </div>
-
-          <div className="flex items-center justify-center h-40">
-            <div className="text-center">
-              <p className="text-5xl font-bold neon-text-cyan mb-2">{totalPlayTimeHours}</p>
-              <p className="text-muted-foreground">Total Hours Played</p>
-              {totalPlayTimeHours === 0 && (
-                <p className="text-sm text-muted-foreground mt-4">Start playing games to track your time!</p>
-              )}
+            <div className="flex items-center justify-center h-40">
+              <div className="text-center">
+                <Skeleton className="h-12 w-20 mx-auto mb-2" />
+                <Skeleton className="h-4 w-32 mx-auto" />
+              </div>
             </div>
-          </div>
-        </NeonCard>
+          </NeonCard>
+        ) : (
+          <NeonCard className="lg:col-span-2 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <Clock className="w-5 h-5 text-primary" />
+                <h2 className="font-bold">Total Playtime</h2>
+              </div>
+              <span className="text-sm text-muted-foreground">{totalPlayTimeHours} hours played</span>
+            </div>
+            <div className="flex items-center justify-center h-40">
+              <div className="text-center">
+                <p className="text-5xl font-bold neon-text-cyan mb-2">{totalPlayTimeHours}</p>
+                <p className="text-muted-foreground">Total Hours Played</p>
+                {totalPlayTimeHours === 0 && (
+                  <p className="text-sm text-muted-foreground mt-4">Start playing games to track your time!</p>
+                )}
+              </div>
+            </div>
+          </NeonCard>
+        )}
 
         {/* Quick Actions */}
         <NeonCard className="p-6">

@@ -24,15 +24,15 @@
 import { taskRepo } from '@/src/lib/repositories/taskRepo'
 import { getUserByClerkId, addTokensToUser, addXPToUser } from '@/lib/db-helpers'
 
-// Default streak rewards
+// Default streak rewards (7-day cycle)
 const DEFAULT_STREAK_REWARDS = [
     { day: 1, reward: 1 },
-    { day: 2, reward: 1 },
-    { day: 3, reward: 1 },
-    { day: 4, reward: 2 },
-    { day: 5, reward: 2 },
-    { day: 6, reward: 3 },
-    { day: 7, reward: 5 },
+    { day: 2, reward: 2 },
+    { day: 3, reward: 3 },
+    { day: 4, reward: 4 },
+    { day: 5, reward: 5 },
+    { day: 6, reward: 6 },
+    { day: 7, reward: 10 },
 ]
 
 export interface TasksResponse {

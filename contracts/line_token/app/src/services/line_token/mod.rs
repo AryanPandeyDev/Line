@@ -4,6 +4,7 @@
 //! - Mintable by authorized minters only
 //! - Transferable between accounts
 //! - Admin can add/remove minters
+//! - Backend-authorized withdrawals (users pay gas, backend signs)
 
 #![allow(static_mut_refs)]
 
@@ -12,8 +13,19 @@ use sails_rs::{
     gstd::{msg, service},
     prelude::*,
 };
+use gstd::exec;
+use blake2::{Blake2b, Digest};
+use blake2::digest::consts::U32;
+use schnorrkel::{PublicKey, Signature, signing_context};
 
 mod funcs;
+
+/// Domain separator for withdrawal signatures
+const WITHDRAWAL_DOMAIN: &[u8] = b"LINE_WITHDRAW_V1";
+
+/// Signing context for schnorrkel (must match @polkadot/util-crypto)
+/// polkadot/util-crypto uses 'substrate' as the default signing context
+const SIGNING_CTX: &[u8] = b"substrate";
 
 /// Storage for LINE token
 #[derive(Default)]
@@ -28,6 +40,16 @@ pub struct Storage {
     pub minters: HashSet<ActorId>,
     /// Admins (can add/remove minters)
     pub admins: HashSet<ActorId>,
+    
+    // === Withdrawal feature fields ===
+    /// Backend signer public key (sr25519, 32 bytes)
+    pub backend_signer_pubkey: Option<[u8; 32]>,
+    /// Used withdrawal IDs to prevent replay attacks
+    pub used_withdrawals: HashSet<[u8; 32]>,
+    /// Emergency pause for withdrawals
+    pub withdrawals_paused: bool,
+    /// Maximum withdrawal amount per transaction (safety cap)
+    pub max_withdrawal_per_tx: Option<U256>,
 }
 
 /// Token metadata
@@ -74,6 +96,20 @@ pub enum Event {
     MinterRemoved {
         minter: ActorId,
     },
+    /// Tokens withdrawn via backend authorization
+    WithdrawalExecuted {
+        to: ActorId,
+        amount: U256,
+        withdrawal_id: [u8; 32],
+    },
+    /// Backend signer public key updated
+    BackendSignerUpdated {
+        signer_pubkey: [u8; 32],
+    },
+    /// Withdrawals paused
+    WithdrawalsPaused {},
+    /// Withdrawals unpaused
+    WithdrawalsUnpaused {},
 }
 
 /// LINE Token Service
@@ -203,6 +239,136 @@ impl LineTokenService {
     pub fn admins(&self) -> Vec<ActorId> {
         Storage::get().admins.iter().cloned().collect()
     }
+
+    // =========================================================================
+    // WITHDRAWAL FEATURE - Backend-authorized, user-paid withdrawals
+    // =========================================================================
+
+    /// Withdraw tokens with backend authorization (user pays gas)
+    /// 
+    /// # Arguments
+    /// * `amount` - Amount of LINE tokens to withdraw (with decimals)
+    /// * `withdrawal_id` - Unique 32-byte ID for this withdrawal (prevents replay)
+    /// * `expiry` - Timestamp (ms) after which this withdrawal is invalid
+    /// * `signature` - 64-byte sr25519 signature from backend
+    #[export]
+    pub fn withdraw(
+        &mut self,
+        amount: U256,
+        withdrawal_id: [u8; 32],
+        expiry: u64,
+        signature: Vec<u8>,
+    ) -> bool {
+        let storage = Storage::get();
+        
+        // 1. Check withdrawals not paused
+        if storage.withdrawals_paused {
+            panic!("Withdrawals are paused");
+        }
+
+        // 2. Check expiry
+        let current_time = exec::block_timestamp();
+        if current_time > expiry {
+            panic!("Withdrawal expired");
+        }
+
+        // 3. Check withdrawal_id not used
+        if storage.used_withdrawals.contains(&withdrawal_id) {
+            panic!("Withdrawal already used");
+        }
+
+        // 4. Get backend signer
+        let signer_pubkey = storage.backend_signer_pubkey
+            .expect("Backend signer not configured");
+
+        // 5. Check max withdrawal limit if set
+        if let Some(max) = storage.max_withdrawal_per_tx {
+            if amount > max {
+                panic!("Amount exceeds maximum withdrawal limit");
+            }
+        }
+
+        // 6. Reconstruct and hash payload
+        let caller = msg::source();
+        let payload_hash = compute_withdrawal_hash(caller, amount, withdrawal_id, expiry);
+
+        // 7. Verify sr25519 signature
+        verify_sr25519_signature(&payload_hash, &signature, &signer_pubkey);
+
+        // 8. Mark withdrawal_id as used (BEFORE minting to prevent reentrancy)
+        let storage = Storage::get_mut();
+        storage.used_withdrawals.insert(withdrawal_id);
+
+        // 9. Mint tokens to caller
+        funcs::mint(&mut storage.balances, &mut storage.total_supply, caller, amount);
+
+        // 10. Emit event
+        self.emit_event(Event::WithdrawalExecuted {
+            to: caller,
+            amount,
+            withdrawal_id,
+        }).expect("Notification Error");
+
+        true
+    }
+
+    /// Set backend signer public key (admin only)
+    #[export]
+    pub fn set_backend_signer(&mut self, signer_pubkey: [u8; 32]) {
+        self.ensure_admin();
+        Storage::get_mut().backend_signer_pubkey = Some(signer_pubkey);
+        self.emit_event(Event::BackendSignerUpdated { signer_pubkey })
+            .expect("Notification Error");
+    }
+
+    /// Pause withdrawals (admin only, emergency stop)
+    #[export]
+    pub fn pause_withdrawals(&mut self) {
+        self.ensure_admin();
+        Storage::get_mut().withdrawals_paused = true;
+        self.emit_event(Event::WithdrawalsPaused {})
+            .expect("Notification Error");
+    }
+
+    /// Unpause withdrawals (admin only)
+    #[export]
+    pub fn unpause_withdrawals(&mut self) {
+        self.ensure_admin();
+        Storage::get_mut().withdrawals_paused = false;
+        self.emit_event(Event::WithdrawalsUnpaused {})
+            .expect("Notification Error");
+    }
+
+    /// Set maximum withdrawal per transaction (admin only)
+    #[export]
+    pub fn set_max_withdrawal(&mut self, max_amount: Option<U256>) {
+        self.ensure_admin();
+        Storage::get_mut().max_withdrawal_per_tx = max_amount;
+    }
+
+    /// Check if a withdrawal_id has been used
+    #[export]
+    pub fn is_withdrawal_used(&self, withdrawal_id: [u8; 32]) -> bool {
+        Storage::get().used_withdrawals.contains(&withdrawal_id)
+    }
+
+    /// Get backend signer public key
+    #[export]
+    pub fn backend_signer(&self) -> Option<[u8; 32]> {
+        Storage::get().backend_signer_pubkey
+    }
+
+    /// Check if withdrawals are paused
+    #[export]
+    pub fn withdrawals_paused(&self) -> bool {
+        Storage::get().withdrawals_paused
+    }
+
+    /// Get maximum withdrawal per transaction
+    #[export]
+    pub fn max_withdrawal(&self) -> Option<U256> {
+        Storage::get().max_withdrawal_per_tx
+    }
 }
 
 impl LineTokenService {
@@ -210,5 +376,66 @@ impl LineTokenService {
         if !Storage::get().admins.contains(&msg::source()) {
             panic!("Not admin: only admin can perform this action")
         }
+    }
+}
+
+/// Compute blake2b-256 hash of withdrawal payload
+fn compute_withdrawal_hash(
+    caller: ActorId,
+    amount: U256,
+    withdrawal_id: [u8; 32],
+    expiry: u64,
+) -> [u8; 32] {
+    // Blake2b with 256-bit output (matches @polkadot/util-crypto blake2AsU8a)
+    type Blake2b256 = Blake2b<U32>;
+    let mut hasher = Blake2b256::new();
+    
+    // Domain separator
+    hasher.update(WITHDRAWAL_DOMAIN);
+    
+    // Caller ActorId (32 bytes)
+    hasher.update(caller.as_ref());
+    
+    // Amount as big-endian 32 bytes
+    let mut amount_bytes = [0u8; 32];
+    for (i, limb) in amount.0.iter().rev().enumerate() {
+        amount_bytes[i * 8..(i + 1) * 8].copy_from_slice(&limb.to_be_bytes());
+    }
+    hasher.update(&amount_bytes);
+    
+    // Withdrawal ID (32 bytes)
+    hasher.update(&withdrawal_id);
+    
+    // Expiry as big-endian 8 bytes
+    hasher.update(&expiry.to_be_bytes());
+    
+    hasher.finalize().into()
+}
+
+/// Verify sr25519 signature using schnorrkel
+fn verify_sr25519_signature(
+    message_hash: &[u8; 32],
+    signature_bytes: &[u8],
+    pubkey_bytes: &[u8; 32],
+) {
+    // Parse signature (must be 64 bytes)
+    if signature_bytes.len() != 64 {
+        panic!("Invalid signature length: expected 64 bytes");
+    }
+    let mut sig_array = [0u8; 64];
+    sig_array.copy_from_slice(signature_bytes);
+    
+    let signature = Signature::from_bytes(&sig_array)
+        .expect("Invalid signature format");
+    
+    // Parse public key
+    let public_key = PublicKey::from_bytes(pubkey_bytes)
+        .expect("Invalid public key format");
+    
+    // Create signing context and verify
+    let ctx = signing_context(SIGNING_CTX);
+    
+    if public_key.verify(ctx.bytes(message_hash), &signature).is_err() {
+        panic!("Invalid signature: verification failed");
     }
 }

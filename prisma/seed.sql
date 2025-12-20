@@ -1,15 +1,15 @@
 -- Run this in Supabase Dashboard > SQL Editor
 
--- 1. Seed StreakReward (days 1-7)
+-- 1. Seed StreakReward (days 1-7) - 7-day cycle
 INSERT INTO "StreakReward" (id, day, reward)
 VALUES 
   (gen_random_uuid()::text, 1, 1),
-  (gen_random_uuid()::text, 2, 1),
-  (gen_random_uuid()::text, 3, 1),
-  (gen_random_uuid()::text, 4, 2),
-  (gen_random_uuid()::text, 5, 2),
-  (gen_random_uuid()::text, 6, 3),
-  (gen_random_uuid()::text, 7, 5)
+  (gen_random_uuid()::text, 2, 2),
+  (gen_random_uuid()::text, 3, 3),
+  (gen_random_uuid()::text, 4, 4),
+  (gen_random_uuid()::text, 5, 5),
+  (gen_random_uuid()::text, 6, 6),
+  (gen_random_uuid()::text, 7, 10)
 ON CONFLICT (day) DO UPDATE SET reward = EXCLUDED.reward;
 
 -- 2. Seed Tasks

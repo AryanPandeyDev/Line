@@ -2789,10 +2789,12 @@ dependencies = [
 name = "line-token-app"
 version = "1.0.0"
 dependencies = [
+ "blake2",
  "gstd",
  "parity-scale-codec",
  "sails-rs",
  "scale-info",
+ "schnorrkel",
 ]
 
 [[package]]

@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Menu, X, Wallet, User, LogOut, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useAuth, useUser, SignOutButton } from "@clerk/nextjs"
 import { useAppSelector, useAppDispatch } from "@/lib/redux/hooks"
-import { selectIsWalletConnected, selectShortAddress } from "@/lib/redux/slices/wallet-slice"
+import { selectIsWalletConnected, selectShortAddress, selectWalletLoading, fetchWallet } from "@/lib/redux/slices/wallet-slice"
 import { openModal } from "@/lib/redux/slices/ui-slice"
 import { cn } from "@/lib/utils"
 
@@ -36,6 +36,14 @@ export function Navbar({ isLanding = false }: NavbarProps) {
   const { user } = useUser()
   const isWalletConnected = useAppSelector(selectIsWalletConnected)
   const shortAddress = useAppSelector(selectShortAddress)
+  const walletLoading = useAppSelector(selectWalletLoading)
+
+  // Fetch wallet state when user is signed in (for landing page which doesn't have AuthProvider)
+  useEffect(() => {
+    if (isSignedIn && !isWalletConnected && !walletLoading && !shortAddress) {
+      dispatch(fetchWallet())
+    }
+  }, [isSignedIn, isWalletConnected, walletLoading, shortAddress, dispatch])
 
   const handleWalletClick = () => {
     dispatch(openModal({ type: "wallet-connect" }))
