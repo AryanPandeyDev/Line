@@ -1,7 +1,7 @@
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit"
 
 export type Theme = "dark" | "neon"
-export type ModalType = "wallet-connect" | "nft-detail" | "claim-reward" | "buy-nft" | null
+export type ModalType = "wallet-connect" | "withdrawal" | "nft-detail" | "claim-reward" | "buy-nft" | null
 
 interface Toast {
   id: string

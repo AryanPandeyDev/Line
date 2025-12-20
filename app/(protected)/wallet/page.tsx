@@ -145,25 +145,11 @@ export default function WalletPage() {
 
               <div className="flex gap-2">
                 <Button
-                  className="flex-1 bg-primary hover:bg-primary/80 relative group"
-                  disabled
-                >
-                  <ArrowDownLeft className="w-4 h-4 mr-2" />
-                  Deposit
-                  <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-background border border-border px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                    Coming Soon
-                  </span>
-                </Button>
-                <Button
-                  variant="outline"
-                  className="flex-1 border-secondary text-secondary hover:bg-secondary/10 bg-transparent relative group"
-                  disabled
+                  onClick={() => dispatch(openModal({ type: "withdrawal" }))}
+                  className="flex-1 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
                 >
                   <ArrowUpRight className="w-4 h-4 mr-2" />
                   Withdraw
-                  <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-background border border-border px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                    Coming Soon
-                  </span>
                 </Button>
               </div>
             </div>

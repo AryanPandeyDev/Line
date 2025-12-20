@@ -43,6 +43,9 @@ interface WalletState {
 
   // Loading state
   isLoading: boolean
+
+  // Flag to prevent infinite fetch loops
+  hasFetched: boolean
 }
 
 const initialState: WalletState = {
@@ -68,6 +71,7 @@ const initialState: WalletState = {
   transactions: [],
 
   isLoading: false,
+  hasFetched: false,
 }
 
 // SubWallet injected provider type
@@ -133,7 +137,7 @@ export const connectWalletAsync = createAsyncThunk(
 )
 
 /**
- * Connect SubWallet - detects extension, gets address, saves to backend
+ * Connect SubWallet - detects extension, prompts account selection, saves to backend
  */
 export const connectSubwallet = createAsyncThunk(
   "wallet/connectSubwallet",
@@ -152,16 +156,27 @@ export const connectSubwallet = createAsyncThunk(
 
       dispatch(setWalletInstalled(true))
 
-      // Enable extension and get accounts
+      // Enable extension - this opens SubWallet popup for authorization
       const extension = await subwallet.enable()
+
+      // Get current accounts
       const accounts = await extension.accounts.get()
 
       if (!accounts || accounts.length === 0) {
         return rejectWithValue("No accounts found. Please create an account in SubWallet.")
       }
 
-      const account = accounts[0]
-      const ss58Address = account.address
+      // If only one account, use it. Otherwise let user know to select in SubWallet first.
+      let selectedAccount = accounts[0]
+
+      if (accounts.length > 1) {
+        // With multiple accounts, SubWallet should show a selection popup
+        // The first account in the list is typically the "active" one selected by user
+        console.log("Multiple accounts available:", accounts.map(a => a.address))
+        console.log("Using first (active) account:", selectedAccount.address)
+      }
+
+      const ss58Address = selectedAccount.address
 
       // Get raw hex ActorId
       let rawAddress: string = ss58Address
@@ -304,6 +319,7 @@ const walletSlice = createSlice({
       })
       .addCase(fetchWallet.fulfilled, (state, action) => {
         state.isLoading = false
+        state.hasFetched = true  // Mark as fetched to prevent infinite loops
         if (action.payload) {
           state.isConnected = action.payload.isConnected || false
           state.address = action.payload.address || null
@@ -318,6 +334,7 @@ const walletSlice = createSlice({
       })
       .addCase(fetchWallet.rejected, (state, action) => {
         state.isLoading = false
+        state.hasFetched = true  // Mark as fetched even on error to prevent infinite loops
         state.error = action.payload as string
       })
 
@@ -370,8 +387,13 @@ const walletSlice = createSlice({
       })
 
       // Disconnect wallet
+      .addCase(disconnectWalletAsync.pending, (state) => {
+        // Set loading to prevent navbar from re-fetching
+        state.loadingWallet = true
+      })
       .addCase(disconnectWalletAsync.fulfilled, (state) => {
         state.isConnected = false
+        state.loadingWallet = false
         state.address = null
         state.addressRaw = null
         state.shortAddress = null
@@ -382,6 +404,9 @@ const walletSlice = createSlice({
         state.nftCount = 0
         state.transactions = []
         state.transactionHistory = []
+      })
+      .addCase(disconnectWalletAsync.rejected, (state) => {
+        state.loadingWallet = false
       })
 
       // Fetch on-chain wallet state
@@ -437,3 +462,4 @@ export const selectWalletBalances = (state: { wallet: WalletState }) => ({
 })
 export const selectWalletTransactions = (state: { wallet: WalletState }) => state.wallet.transactions
 export const selectWalletLoading = (state: { wallet: WalletState }) => state.wallet.isLoading
+export const selectHasFetched = (state: { wallet: WalletState }) => state.wallet.hasFetched

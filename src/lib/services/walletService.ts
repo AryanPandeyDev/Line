@@ -134,15 +134,32 @@ export const walletService = {
     },
 
     /**
-     * Disconnect wallet
+     * Disconnect and delete wallet (allows fresh reconnection with different account)
      */
     disconnectWallet: async (clerkId: string): Promise<WalletActionResult> => {
+        console.log('[WalletService] Disconnecting wallet for clerkId:', clerkId)
+
         const user = await getUserByClerkId(clerkId)
-        if (!user) return { success: false, message: 'User not found' }
+        if (!user) {
+            console.log('[WalletService] User not found for clerkId:', clerkId)
+            return { success: false, message: 'User not found' }
+        }
 
-        await walletRepo.updateByUserId(user.id, { isConnected: false })
+        console.log('[WalletService] Found user:', user.id)
 
-        return { success: true, message: 'Wallet disconnected' }
+        try {
+            const deleted = await walletRepo.deleteByUserId(user.id)
+            console.log('[WalletService] Delete result:', deleted)
+
+            if (!deleted) {
+                return { success: false, message: 'No wallet to disconnect' }
+            }
+
+            return { success: true, message: 'Wallet disconnected and removed' }
+        } catch (error) {
+            console.error('[WalletService] Error deleting wallet:', error)
+            return { success: false, message: 'Failed to delete wallet: ' + (error as Error).message }
+        }
     },
 
     /**

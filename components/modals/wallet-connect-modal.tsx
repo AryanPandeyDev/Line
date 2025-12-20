@@ -7,7 +7,7 @@ import { useAppDispatch, useAppSelector } from "@/lib/redux/hooks"
 import { selectActiveModal, closeModal } from "@/lib/redux/slices/ui-slice"
 import {
   connectSubwallet,
-  disconnectWallet,
+  disconnectWalletAsync,
   selectIsWalletConnected,
   selectIsWalletInstalled,
   selectWallet,
@@ -36,7 +36,7 @@ export function WalletConnectModal() {
   }
 
   const handleDisconnect = () => {
-    dispatch(disconnectWallet())
+    dispatch(disconnectWalletAsync())
   }
 
   const handleClose = () => {

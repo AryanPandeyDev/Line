@@ -435,6 +435,7 @@ enum TokenTransactionType {
 enum WalletTransactionType {
   SEND
   RECEIVE
+  WITHDRAW
   NFT_PURCHASE
   NFT_SALE
   SWAP

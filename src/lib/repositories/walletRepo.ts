@@ -140,4 +140,24 @@ export const walletRepo = {
             data,
         })
     },
+
+    /**
+     * Delete wallet by user ID (for clean disconnect)
+     * First deletes related transactions to avoid foreign key constraint
+     */
+    deleteByUserId: async (userId: string): Promise<boolean> => {
+        const wallet = await db.wallet.findUnique({ where: { userId } })
+        if (!wallet) return false
+
+        // First delete all related transactions
+        await db.walletTransaction.deleteMany({
+            where: { walletId: wallet.id },
+        })
+
+        // Then delete the wallet
+        await db.wallet.delete({
+            where: { id: wallet.id },
+        })
+        return true
+    },
 }

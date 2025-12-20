@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useAuth, useUser, SignOutButton } from "@clerk/nextjs"
 import { useAppSelector, useAppDispatch } from "@/lib/redux/hooks"
-import { selectIsWalletConnected, selectShortAddress, selectWalletLoading, fetchWallet } from "@/lib/redux/slices/wallet-slice"
+import { selectIsWalletConnected, selectShortAddress, selectWalletLoading, selectLoadingWallet, selectHasFetched, fetchWallet } from "@/lib/redux/slices/wallet-slice"
 import { openModal } from "@/lib/redux/slices/ui-slice"
 import { cn } from "@/lib/utils"
 
@@ -37,13 +37,16 @@ export function Navbar({ isLanding = false }: NavbarProps) {
   const isWalletConnected = useAppSelector(selectIsWalletConnected)
   const shortAddress = useAppSelector(selectShortAddress)
   const walletLoading = useAppSelector(selectWalletLoading)
+  const loadingWallet = useAppSelector(selectLoadingWallet)
+  const hasFetched = useAppSelector(selectHasFetched)
 
   // Fetch wallet state when user is signed in (for landing page which doesn't have AuthProvider)
+  // Don't refetch if any loading state is active or if we've already fetched (prevents infinite loops)
   useEffect(() => {
-    if (isSignedIn && !isWalletConnected && !walletLoading && !shortAddress) {
+    if (isSignedIn && !isWalletConnected && !walletLoading && !loadingWallet && !shortAddress && !hasFetched) {
       dispatch(fetchWallet())
     }
-  }, [isSignedIn, isWalletConnected, walletLoading, shortAddress, dispatch])
+  }, [isSignedIn, isWalletConnected, walletLoading, loadingWallet, shortAddress, hasFetched, dispatch])
 
   const handleWalletClick = () => {
     dispatch(openModal({ type: "wallet-connect" }))
