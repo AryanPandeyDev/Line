@@ -237,9 +237,14 @@ export function WithdrawalModal() {
             console.log("[Withdrawal] 15. App wallet address:", wallet.address)
             console.log("[Withdrawal] 16. App wallet addressRaw:", wallet.addressRaw)
 
+            // Use a reasonable gas limit (10 billion is typical for contract calls)
+            // Note: 250 billion was too high and caused InsufficientBalance errors
+            const gasLimit = BigInt("10000000000")  // 10 billion gas
+            console.log("[Withdrawal] 16a. Using gas limit:", gasLimit.toString())
+
             // Set the signer from SubWallet
             transaction.withAccount(account.address, { signer: extension.signer })
-            transaction.withGas(BigInt("250000000000"))  // 250 billion gas
+            transaction.withGas(gasLimit)
 
             console.log("[Withdrawal] 17. Calling signAndSend...")
 
