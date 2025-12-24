@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const LINE_TOKEN_PROGRAM_ID = "0x3b058266d408750140a71b4f82d969be2d10052d1a6ff556d2fa52e3f45ac921";
+const LINE_TOKEN_PROGRAM_ID = process.env.NEXT_PUBLIC_LINE_TOKEN_PROGRAM_ID || "";
 const LINE_TOKEN_DECIMALS = 9;
 const VARA_RPC = "wss://testnet.vara.network";
 

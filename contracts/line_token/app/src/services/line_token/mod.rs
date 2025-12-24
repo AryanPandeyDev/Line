@@ -50,6 +50,10 @@ pub struct Storage {
     pub withdrawals_paused: bool,
     /// Maximum withdrawal amount per transaction (safety cap)
     pub max_withdrawal_per_tx: Option<U256>,
+    
+    // === Allowance feature fields (ERC20-style) ===
+    /// Allowances: (owner, spender) -> approved amount
+    pub allowances: HashMap<(ActorId, ActorId), U256>,
 }
 
 /// Token metadata
@@ -110,6 +114,12 @@ pub enum Event {
     WithdrawalsPaused {},
     /// Withdrawals unpaused
     WithdrawalsUnpaused {},
+    /// Approval for spending tokens (ERC20-style)
+    Approval {
+        owner: ActorId,
+        spender: ActorId,
+        value: U256,
+    },
 }
 
 /// LINE Token Service
@@ -238,6 +248,75 @@ impl LineTokenService {
     #[export]
     pub fn admins(&self) -> Vec<ActorId> {
         Storage::get().admins.iter().cloned().collect()
+    }
+
+    // =========================================================================
+    // ALLOWANCE FEATURE - ERC20-style approve/transferFrom for marketplace
+    // =========================================================================
+
+    /// Approve a spender to spend tokens on behalf of the caller
+    /// Similar to ERC20 approve - overwrites any existing allowance
+    #[export]
+    pub fn approve(&mut self, spender: ActorId, value: U256) -> bool {
+        let owner = msg::source();
+        let storage = Storage::get_mut();
+        
+        // Store allowance (overwrites if exists)
+        storage.allowances.insert((owner, spender), value);
+        
+        self.emit_event(Event::Approval { owner, spender, value })
+            .expect("Notification Error");
+        
+        true
+    }
+
+    /// Get the allowance for a spender to spend from an owner
+    /// Returns 0 if no allowance exists
+    #[export]
+    pub fn allowance(&self, owner: ActorId, spender: ActorId) -> U256 {
+        Storage::get()
+            .allowances
+            .get(&(owner, spender))
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Transfer tokens from one account to another using allowance
+    /// Similar to ERC20 transferFrom - caller must have sufficient allowance
+    #[export]
+    pub fn transfer_from(&mut self, from: ActorId, to: ActorId, value: U256) -> bool {
+        let caller = msg::source();
+        let storage = Storage::get_mut();
+        
+        // Get current allowance
+        let current_allowance = storage
+            .allowances
+            .get(&(from, caller))
+            .cloned()
+            .unwrap_or_default();
+        
+        // Check allowance
+        if current_allowance < value {
+            panic!("Insufficient allowance");
+        }
+        
+        // Decrease allowance FIRST (before transfer for reentrancy safety)
+        let new_allowance = current_allowance - value;
+        if new_allowance.is_zero() {
+            storage.allowances.remove(&(from, caller));
+        } else {
+            storage.allowances.insert((from, caller), new_allowance);
+        }
+        
+        // Perform transfer using existing logic
+        let mutated = funcs::transfer(&mut storage.balances, from, to, value);
+        
+        if mutated {
+            self.emit_event(Event::Transfer { from, to, value })
+                .expect("Notification Error");
+        }
+        
+        mutated
     }
 
     // =========================================================================

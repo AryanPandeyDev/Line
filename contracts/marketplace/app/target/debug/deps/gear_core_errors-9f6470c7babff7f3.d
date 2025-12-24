@@ -1,0 +1,8 @@
+C:\Projects\Line\contracts\marketplace\app\target\debug\deps\gear_core_errors-9f6470c7babff7f3.d: C:\Users\Aryan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gear-core-errors-1.9.2\src\lib.rs C:\Users\Aryan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gear-core-errors-1.9.2\src\simple.rs
+
+C:\Projects\Line\contracts\marketplace\app\target\debug\deps\libgear_core_errors-9f6470c7babff7f3.rlib: C:\Users\Aryan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gear-core-errors-1.9.2\src\lib.rs C:\Users\Aryan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gear-core-errors-1.9.2\src\simple.rs
+
+C:\Projects\Line\contracts\marketplace\app\target\debug\deps\libgear_core_errors-9f6470c7babff7f3.rmeta: C:\Users\Aryan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gear-core-errors-1.9.2\src\lib.rs C:\Users\Aryan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gear-core-errors-1.9.2\src\simple.rs
+
+C:\Users\Aryan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gear-core-errors-1.9.2\src\lib.rs:
+C:\Users\Aryan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gear-core-errors-1.9.2\src\simple.rs:

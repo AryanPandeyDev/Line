@@ -202,19 +202,9 @@ export const withdrawalService = {
             console.log('[Withdrawal API] Signature:', u8aToHex(signature))
             console.log('[Withdrawal API] Signer pubkey:', u8aToHex(keypair.publicKey))
 
-            // Store pending withdrawal in DB
-            await db.walletTransaction.create({
-                data: {
-                    walletId: wallet.id,
-                    type: 'WITHDRAW',
-                    status: 'PENDING',
-                    tokenType: 'LINE',
-                    amount: amount,
-                    fromAddress: wallet.address,
-                    toAddress: wallet.address,  // Withdrawal is to same address on-chain
-                    txHash: withdrawalId,  // Use withdrawalId as temporary identifier
-                }
-            })
+            // Note: We don't create a transaction record here.
+            // Transaction will only be created in confirmWithdrawal after successful on-chain tx.
+            // This ensures only successful transactions appear in history.
 
             return {
                 success: true,
@@ -240,7 +230,7 @@ export const withdrawalService = {
 
     /**
      * Confirm a withdrawal after on-chain transaction
-     * This deducts the balance from the user's DB account
+     * This deducts the balance from the user's DB account and creates the transaction record
      */
     confirmWithdrawal: async (request: WithdrawalConfirmRequest): Promise<WithdrawalConfirmResult> => {
         const { clerkId, withdrawalId, txHash, amount } = request
@@ -253,44 +243,32 @@ export const withdrawalService = {
 
         // Get wallet
         const wallet = await db.wallet.findUnique({
-            where: { userId: user.id },
-            include: { transactions: true }
+            where: { userId: user.id }
         })
 
         if (!wallet) {
             return { success: false, message: 'Wallet not found', error: 'WALLET_NOT_FOUND' }
         }
 
-        // Find pending withdrawal transaction
-        const pendingTx = await db.walletTransaction.findFirst({
+        // Check balance
+        if (user.tokenBalance < amount) {
+            return { success: false, message: 'Insufficient balance', error: 'INSUFFICIENT_BALANCE' }
+        }
+
+        // Check if this withdrawal was already confirmed (prevent double-spending)
+        const existingTx = await db.walletTransaction.findFirst({
             where: {
                 walletId: wallet.id,
-                txHash: withdrawalId,
-                status: 'PENDING',
+                txHash: txHash,
                 type: 'WITHDRAW'
             }
         })
 
-        if (!pendingTx) {
-            return { success: false, message: 'Pending withdrawal not found', error: 'WITHDRAWAL_NOT_FOUND' }
+        if (existingTx) {
+            return { success: false, message: 'This withdrawal has already been processed', error: 'ALREADY_PROCESSED' }
         }
 
-        // Verify amount matches
-        if (pendingTx.amount !== amount) {
-            return { success: false, message: 'Amount mismatch', error: 'AMOUNT_MISMATCH' }
-        }
-
-        // Double-check balance (in case it changed)
-        if (user.tokenBalance < amount) {
-            // Mark as failed
-            await db.walletTransaction.update({
-                where: { id: pendingTx.id },
-                data: { status: 'FAILED' }
-            })
-            return { success: false, message: 'Insufficient balance', error: 'INSUFFICIENT_BALANCE' }
-        }
-
-        // Begin transaction - deduct balance and update transaction
+        // Begin transaction - create record and deduct balance
         try {
             await db.$transaction([
                 // Deduct from user balance
@@ -300,12 +278,17 @@ export const withdrawalService = {
                         tokenBalance: { decrement: amount }
                     }
                 }),
-                // Update transaction with real txHash and confirm
-                db.walletTransaction.update({
-                    where: { id: pendingTx.id },
+                // Create confirmed wallet transaction record
+                db.walletTransaction.create({
                     data: {
-                        txHash: txHash,
+                        walletId: wallet.id,
+                        type: 'WITHDRAW',
                         status: 'CONFIRMED',
+                        tokenType: 'LINE',
+                        amount: amount,
+                        fromAddress: wallet.address,
+                        toAddress: wallet.address,  // Withdrawal is to same address on-chain
+                        txHash: txHash,
                         confirmedAt: new Date()
                     }
                 }),

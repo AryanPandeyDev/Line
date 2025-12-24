@@ -114,16 +114,44 @@ export function WithdrawalModal() {
 
             setStep("success")
 
-            // Refresh wallet state
-            if (wallet.addressRaw) {
-                dispatch(fetchWalletState(wallet.addressRaw))
+            // Refresh wallet state (on-chain balances)
+            const refreshAddress = wallet.addressRaw || wallet.address
+            if (refreshAddress) {
+                console.log("[Withdrawal] Refreshing wallet state for:", refreshAddress)
+                dispatch(fetchWalletState(refreshAddress))
             }
+
+            // Also refresh user data (DB balance)
+            // The confirm endpoint already updated the DB, so re-fetching the user will show the new balance
 
         } catch (err) {
             console.error("Withdrawal error:", err)
             console.error("Error type:", typeof err)
             console.error("Error stringified:", JSON.stringify(err, Object.getOwnPropertyNames(err)))
-            setError(err instanceof Error ? err.message : "Withdrawal failed")
+
+            // Extract error message from various formats
+            let errorMessage = "Withdrawal failed"
+
+            if (err instanceof Error) {
+                errorMessage = err.message
+            } else if (typeof err === 'object' && err !== null) {
+                // Handle Sails/Gear contract errors (e.g. {docs: "...", method: "InsufficientBalance", name: "..."})
+                const errObj = err as Record<string, unknown>
+                if (errObj.docs && typeof errObj.docs === 'string') {
+                    errorMessage = errObj.docs
+                } else if (errObj.message && typeof errObj.message === 'string') {
+                    errorMessage = errObj.message
+                } else if (errObj.method && typeof errObj.method === 'string') {
+                    // Convert camelCase to readable format
+                    errorMessage = errObj.method.replace(/([A-Z])/g, ' $1').trim()
+                } else if (errObj.name && typeof errObj.name === 'string') {
+                    errorMessage = errObj.name.replace(/([A-Z])/g, ' $1').trim()
+                }
+            } else if (typeof err === 'string') {
+                errorMessage = err
+            }
+
+            setError(errorMessage)
             setStep("error")
         }
     }
@@ -232,24 +260,80 @@ export function WithdrawalModal() {
                 console.error("Looking for:", wallet.address, wallet.addressRaw)
                 throw new Error("Account not found in SubWallet. Make sure you're using the same account.")
             }
-
             console.log("[Withdrawal] 14. Using account:", account.address)
             console.log("[Withdrawal] 15. App wallet address:", wallet.address)
             console.log("[Withdrawal] 16. App wallet addressRaw:", wallet.addressRaw)
 
-            // Use a reasonable gas limit (10 billion is typical for contract calls)
-            // Note: 250 billion was too high and caused InsufficientBalance errors
-            const gasLimit = BigInt("10000000000")  // 10 billion gas
-            console.log("[Withdrawal] 16a. Using gas limit:", gasLimit.toString())
-
-            // Set the signer from SubWallet
+            // Set the account on the transaction first (required for gas calculation)
             transaction.withAccount(account.address, { signer: extension.signer })
-            transaction.withGas(gasLimit)
+
+            // Use Sails built-in calculateGas() method
+            console.log("[Withdrawal] 16a. Calculating gas using Sails calculateGas()...")
+            try {
+                await transaction.calculateGas()
+                console.log("[Withdrawal] 16b. Gas calculated successfully")
+            } catch (gasError) {
+                console.error("[Withdrawal] Gas calculation failed:", gasError)
+                const errorMessage = gasError instanceof Error ? gasError.message : String(gasError)
+                if (errorMessage.toLowerCase().includes("insufficient") || errorMessage.toLowerCase().includes("balance")) {
+                    throw new Error("Insufficient VARA balance to pay for transaction gas. Please add more VARA to your wallet.")
+                }
+                throw new Error(`Gas calculation failed: ${errorMessage}`)
+            }
+
+            // Get the calculated gas limit from the transaction
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const txAny = transaction as any
+
+            // Debug: log all properties to find where gas is stored
+            console.log("[Withdrawal] 16c. Transaction properties:", Object.keys(txAny))
+            console.log("[Withdrawal] 16c. _gas:", txAny._gas)
+            console.log("[Withdrawal] 16c. _gasLimit:", txAny._gasLimit)
+            console.log("[Withdrawal] 16c. gasLimit:", txAny.gasLimit)
+
+            // Try to get gas from various possible properties
+            let gasLimit = txAny._gas || txAny._gasLimit || txAny.gasLimit || BigInt(0)
+
+            // If still 0, try getting transaction fee as an estimate
+            if (gasLimit === BigInt(0) || gasLimit === 0) {
+                try {
+                    const fee = await transaction.transactionFee()
+                    console.log("[Withdrawal] 16c. Transaction fee:", fee?.toString())
+                    // Fee gives us an idea of the gas needed - multiply by 2 for safety
+                    if (fee && fee > BigInt(0)) {
+                        gasLimit = fee * BigInt(2)
+                    }
+                } catch (feeError) {
+                    console.log("[Withdrawal] 16c. Could not get fee:", feeError)
+                }
+            }
+
+            console.log("[Withdrawal] 16c. Final gas limit:", gasLimit.toString())
+
+            // Check if user has enough VARA for the gas
+            const accountInfo = await api.query.system.account(account.address)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const freeBalance = (accountInfo as any).data.free.toBigInt()
+            console.log("[Withdrawal] 16d. User VARA balance:", freeBalance.toString())
+
+            // Gas requires a deposit - check if user has enough
+            // The gas price is roughly 1:1 with value on Vara
+            if (gasLimit > BigInt(0) && freeBalance < gasLimit) {
+                const gasInVara = Number(gasLimit) / 1e12
+                const balanceInVara = Number(freeBalance) / 1e12
+                throw new Error(
+                    `Insufficient VARA balance for gas. You have ${balanceInVara.toFixed(4)} VARA but need approximately ${gasInVara.toFixed(4)} VARA for gas fees.`
+                )
+            }
+            console.log("[Withdrawal] 16e. Balance check passed")
 
             console.log("[Withdrawal] 17. Calling signAndSend...")
 
+            // Small delay to allow UI to update before popup
+            await new Promise(resolve => setTimeout(resolve, 100))
+
             // Sign and send
-            console.log("[Withdrawal] 18. Signing and sending...")
+            console.log("[Withdrawal] 18. Signing and sending... (check for SubWallet popup)")
             const result = await transaction.signAndSend()
             console.log("[Withdrawal] 19. Transaction result:", result)
             console.log("[Withdrawal] 19a. Result type:", typeof result)
