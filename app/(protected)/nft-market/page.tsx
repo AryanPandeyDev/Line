@@ -47,8 +47,10 @@ interface SerializedAuction {
     name?: string
     description?: string
     image?: string
-    creator?: string
+    collection?: string
     rarity?: string
+    creator?: string
+    attributes?: Array<{ trait_type: string; value: string | number }>
   } | null
 }
 
@@ -80,6 +82,7 @@ export default function NFTMarketPage() {
   const {
     finalizeAuction,
     placeBid,
+    approveLineForMarketplace,
     claimRefund,
     claimPayout,
     state: actionState,
@@ -230,6 +233,8 @@ export default function NFTMarketPage() {
     name: auction.metadata?.name || `NFT #${auction.tokenId}`,
     creator: auction.metadata?.creator || `${auction.seller.slice(0, 8)}...`,
     image: auction.metadata?.image || '/placeholder.svg',
+    description: auction.metadata?.description || '',
+    collection: auction.metadata?.collection || 'LINE Genesis',
     currentBid: auction.highestBid,
     startPrice: auction.startPrice,
     minBidIncrement: auction.minBidIncrement,
@@ -237,6 +242,7 @@ export default function NFTMarketPage() {
     highestBidder: auction.highestBidder,
     likes: 0,
     rarity: auction.metadata?.rarity || 'Common',
+    attributes: auction.metadata?.attributes || [],
     isAuction: true,
     isEnded: auction.isEnded,
   })
@@ -460,6 +466,10 @@ export default function NFTMarketPage() {
             if (success) {
               setSelectedAuction(null)
             }
+            return success
+          }}
+          onApprove={async (amount: bigint) => {
+            const success = await approveLineForMarketplace(amount)
             return success
           }}
         />

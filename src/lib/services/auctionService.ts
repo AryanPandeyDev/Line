@@ -41,8 +41,9 @@ export interface NFTMetadata {
     name: string
     description: string
     image: string
-    creator: string
-    rarity: 'Common' | 'Rare' | 'Epic' | 'Legendary' | 'Mythic'
+    collection?: string
+    rarity?: string
+    creator?: string
     attributes?: Array<{ trait_type: string; value: string | number }>
     external_url?: string
 }

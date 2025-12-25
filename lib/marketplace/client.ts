@@ -151,6 +151,119 @@ async function createMarketplaceSails() {
     return { api, sails }
 }
 
+/**
+ * Create Sails client for LINE token contract (client-side)
+ */
+async function createLineTokenSails() {
+    if (!CONTRACTS.LINE_TOKEN) {
+        throw new Error('LINE Token contract not configured. Check NEXT_PUBLIC_LINE_PROGRAM_ID.')
+    }
+
+    const { GearApi } = await import('@gear-js/api')
+    const { Sails } = await import('sails-js')
+    const { SailsIdlParser } = await import('sails-js-parser')
+
+    // Connect to Vara network
+    const api = await GearApi.create({ providerAddress: VARA_RPC })
+
+    // Fetch IDL from public folder
+    const idlResponse = await fetch('/contracts/line_token.idl')
+    if (!idlResponse.ok) {
+        throw new Error('Failed to fetch LINE token IDL')
+    }
+    const idl = await idlResponse.text()
+
+    // Initialize Sails
+    const parser = new SailsIdlParser()
+    await parser.init()
+    const sails = new Sails(parser)
+    sails.parseIdl(idl)
+    sails.setApi(api)
+    sails.setProgramId(CONTRACTS.LINE_TOKEN as `0x${string}`)
+
+    return { api, sails }
+}
+
+// ============================================================================
+// LINE TOKEN OPERATIONS  
+// ============================================================================
+
+export const lineTokenClient = {
+    /**
+     * Approve marketplace to spend LINE tokens
+     * This must complete before placing a bid
+     *
+     * @param amount - Amount to approve in raw units
+     * @param walletAddress - User's wallet address for signing
+     * @returns Transaction result
+     */
+    async approveMarketplace(
+        amount: bigint,
+        walletAddress: string
+    ): Promise<TransactionResult> {
+        console.log('[LineTokenClient] Approving marketplace for amount:', amount.toString())
+
+        if (!CONTRACTS.MARKETPLACE) {
+            return { success: false, error: 'Marketplace contract not configured' }
+        }
+
+        const extension = await getSubWallet()
+        const account = await findAccount(extension, walletAddress)
+        const { api, sails } = await createLineTokenSails()
+
+        try {
+            // LINE token Approve function: Approve(spender: actor_id, value: u256)
+            const transaction = sails.services.Line.functions.Approve(
+                CONTRACTS.MARKETPLACE as `0x${string}`,  // spender = marketplace
+                amount
+            )
+
+            transaction.withAccount(account.address, { signer: extension.signer })
+
+            console.log('[LineTokenClient] Calculating gas...')
+            await transaction.calculateGas()
+
+            console.log('[LineTokenClient] Signing approval (check SubWallet popup)...')
+            const result = await transaction.signAndSend()
+            console.log('[LineTokenClient] Approval sent:', result)
+
+            // Wait for the contract response to ensure it's confirmed
+            if (result.response && typeof result.response === 'function') {
+                try {
+                    console.log('[LineTokenClient] Waiting for approval confirmation...')
+                    const contractResponse = await result.response()
+                    console.log('[LineTokenClient] Approval response:', contractResponse)
+
+                    if (contractResponse === false) {
+                        throw new Error('Approval rejected by contract')
+                    }
+                } catch (responseError) {
+                    console.error('[LineTokenClient] Response error:', responseError)
+                    // If we can't get response but block hash exists, consider it successful
+                    if (!result.blockHash) {
+                        throw responseError
+                    }
+                }
+            }
+
+            return {
+                success: true,
+                blockHash: result.blockHash,
+                txHash: result.txHash,
+                msgId: result.msgId,
+            }
+        } catch (error) {
+            console.error('[LineTokenClient] Approve error:', error)
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Approval failed',
+            }
+        } finally {
+            await api.disconnect()
+        }
+    },
+}
+
 // ============================================================================
 // MARKETPLACE OPERATIONS
 // ============================================================================

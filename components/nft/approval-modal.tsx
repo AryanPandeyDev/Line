@@ -32,7 +32,7 @@ export type ApprovalStatus = "idle" | "approving" | "approved" | "error"
 interface ApprovalModalProps {
     isOpen: boolean
     onClose: () => void
-    onApprove: () => Promise<void>
+    onApprove: () => Promise<boolean>
     onApproveSuccess: () => void
     requiredAmount: bigint
     currentAllowance: bigint
@@ -55,8 +55,11 @@ export function ApprovalModal({
     const handleApprove = async () => {
         setIsProcessing(true)
         try {
-            await onApprove()
-            onApproveSuccess()
+            const result = await onApprove()
+            // Only proceed if approval was successful
+            if (result !== false) {
+                onApproveSuccess()
+            }
         } catch (e) {
             console.error("Approval error:", e)
         } finally {

@@ -41,6 +41,8 @@ interface AuctionNFT {
   name: string
   creator: string
   image: string
+  description?: string
+  collection?: string
   currentBid: string // BigInt as string
   highestBidder?: string | null
   startPrice?: string
@@ -49,7 +51,9 @@ interface AuctionNFT {
   tokenId?: string
   likes: number
   rarity: string
+  attributes?: Array<{ trait_type: string; value: string | number }>
   isAuction?: boolean
+  isEnded?: boolean
 }
 
 type NFTData = LegacyNFT | AuctionNFT
@@ -246,10 +250,10 @@ export function NFTDetailModal({
   }
 
   // Handle approval
-  const handleApprove = async () => {
+  const handleApprove = async (): Promise<boolean> => {
     if (!onApprove) {
       setShowApprovalModal(false)
-      return
+      return false
     }
 
     setApprovalStatus("approving")
@@ -259,14 +263,17 @@ export function NFTDetailModal({
       const success = await onApprove(bidValue)
       if (success) {
         setApprovalStatus("approved")
+        return true
       } else {
         setApprovalStatus("error")
         setError("Approval failed")
+        return false
       }
     } catch (e) {
       console.error("Approval error:", e)
       setApprovalStatus("error")
       setError(e instanceof Error ? e.message : "Approval failed")
+      return false
     }
   }
 
@@ -385,6 +392,39 @@ export function NFTDetailModal({
                 <p className="text-xs text-muted-foreground">Token ID</p>
               </div>
             </div>
+
+            {/* Collection & Description */}
+            {"collection" in nft && nft.collection && (
+              <div className="mb-4">
+                <span className="text-xs font-medium text-muted-foreground">COLLECTION</span>
+                <p className="text-sm font-semibold text-primary">{nft.collection}</p>
+              </div>
+            )}
+
+            {"description" in nft && nft.description && (
+              <div className="mb-6">
+                <span className="text-xs font-medium text-muted-foreground">DESCRIPTION</span>
+                <p className="text-sm text-foreground/80 mt-1">{nft.description}</p>
+              </div>
+            )}
+
+            {/* Attributes Grid */}
+            {"attributes" in nft && nft.attributes && nft.attributes.length > 0 && (
+              <div className="mb-6">
+                <span className="text-xs font-medium text-muted-foreground mb-2 block">ATTRIBUTES</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {nft.attributes.map((attr, index) => (
+                    <div
+                      key={index}
+                      className="bg-background/50 border border-border/50 rounded-lg p-2 text-center"
+                    >
+                      <p className="text-[10px] uppercase text-muted-foreground">{attr.trait_type}</p>
+                      <p className="text-sm font-medium truncate">{attr.value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Current Bid */}
             <div className="bg-gradient-to-r from-primary/10 to-secondary/10 rounded-xl p-4 mb-6 border border-primary/20">
