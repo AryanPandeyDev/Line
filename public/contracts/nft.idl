@@ -1,0 +1,72 @@
+constructor {
+  /// Initialize the NFT contract
+  /// 
+  /// # Arguments
+  /// * `initial_admins` - Optional list of additional admin addresses
+  ///   The deployer is always added as an admin
+  New : (initial_admins: opt vec actor_id);
+};
+
+service Nft {
+  /// Add a new admin
+  /// 
+  /// # Panics
+  /// - If caller is not an admin
+  AddAdmin : (admin: actor_id) -> bool;
+  /// Mint a new NFT to an address
+  /// 
+  /// # Arguments
+  /// * `to` - The address to mint to (typically marketplace)
+  /// * `token_id` - Unique token ID
+  /// * `metadata_uri` - URI pointing to token metadata
+  /// 
+  /// # Panics
+  /// - If caller is not an admin
+  /// - If token_id already exists
+  Mint : (to: actor_id, token_id: u64, metadata_uri: str) -> bool;
+  /// Remove an admin
+  /// 
+  /// # Panics
+  /// - If caller is not an admin
+  RemoveAdmin : (admin: actor_id) -> bool;
+  /// Transfer an NFT from one address to another
+  /// 
+  /// # Arguments
+  /// * `from` - Current owner
+  /// * `to` - New owner
+  /// * `token_id` - Token to transfer
+  /// 
+  /// # Panics
+  /// - If caller is not an admin
+  /// - If token_id does not exist
+  /// - If from is not the current owner
+  TransferFrom : (from: actor_id, to: actor_id, token_id: u64) -> bool;
+  /// Get all admins
+  query Admins : () -> vec actor_id;
+  /// Check if an account is an admin
+  query IsAdmin : (account: actor_id) -> bool;
+  /// Get the owner of a token
+  query OwnerOf : (token_id: u64) -> opt actor_id;
+  /// Get the metadata URI of a token
+  query TokenUri : (token_id: u64) -> opt str;
+  /// Get total number of NFTs minted
+  query TotalSupply : () -> u64;
+
+  events {
+    /// NFT transferred (includes minting where from is zero)
+    Transfer: struct {
+      from: actor_id,
+      to: actor_id,
+      token_id: u64,
+    };
+    /// Admin added
+    AdminAdded: struct {
+      admin: actor_id
+    };
+    /// Admin removed
+    AdminRemoved: struct {
+      admin: actor_id
+    };
+  }
+};
+

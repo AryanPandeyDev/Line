@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
         findByUserId: vi.fn(),
         update: vi.fn(),
         updateByUserId: vi.fn(),
+        deleteByUserId: vi.fn(),
     },
     getUserByClerkId: vi.fn(),
     getOrCreateWallet: vi.fn(),
@@ -111,10 +112,10 @@ describe('walletService', () => {
 
         it('disconnects wallet successfully', async () => {
             mocks.getUserByClerkId.mockResolvedValue(createMockUser())
-            mocks.walletRepo.updateByUserId.mockResolvedValue(undefined)
+            mocks.walletRepo.deleteByUserId.mockResolvedValue(true)
             const result = await walletService.disconnectWallet('clerk-123')
-            expect(mocks.walletRepo.updateByUserId).toHaveBeenCalledWith('user-123', { isConnected: false })
-            expect(result).toEqual({ success: true, message: 'Wallet disconnected' })
+            expect(mocks.walletRepo.deleteByUserId).toHaveBeenCalledWith('user-123')
+            expect(result).toEqual({ success: true, message: 'Wallet disconnected and removed' })
         })
     })
 

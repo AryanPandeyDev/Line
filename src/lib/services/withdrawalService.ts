@@ -13,9 +13,6 @@
  * ============================================================================
  */
 
-import { sr25519PairFromSeed, blake2AsU8a, sr25519Sign, cryptoWaitReady, decodeAddress } from '@polkadot/util-crypto'
-import { hexToU8a, u8aToHex, stringToU8a, u8aConcat, bnToU8a, isHex } from '@polkadot/util'
-import { BN } from '@polkadot/util'
 import { db } from '@/lib/db'
 import { getUserByClerkId } from '@/lib/db-helpers'
 import { randomBytes } from 'crypto'
@@ -25,8 +22,8 @@ const LINE_DECIMALS = 9
 const WITHDRAWAL_EXPIRY_MINUTES = 15
 const LINE_TOKEN_PROGRAM_ID = process.env.NEXT_PUBLIC_LINE_TOKEN_PROGRAM_ID || '0x3b058266d408750140a71b4f82d969be2d10052d1a6ff556d2fa52e3f45ac921'
 
-// Domain separator (must match contract)
-const WITHDRAWAL_DOMAIN = stringToU8a('LINE_WITHDRAW_V1')
+// Domain separator string (must match contract)
+const WITHDRAWAL_DOMAIN_STRING = 'LINE_WITHDRAW_V1'
 
 export interface WithdrawalAuthRequest {
     clerkId: string
@@ -62,9 +59,12 @@ export interface WithdrawalConfirmResult {
 }
 
 /**
- * Get backend keypair from seed
+ * Get backend keypair from seed (uses dynamic import)
  */
 async function getBackendKeypair() {
+    const { cryptoWaitReady, sr25519PairFromSeed } = await import('@polkadot/util-crypto')
+    const { hexToU8a } = await import('@polkadot/util')
+
     await cryptoWaitReady()
     const seedHex = process.env.LINE_BACKEND_SIGNER_SEED
     if (!seedHex) {
@@ -75,16 +75,20 @@ async function getBackendKeypair() {
 }
 
 /**
- * Create withdrawal payload exactly as the contract expects
+ * Create withdrawal payload exactly as the contract expects (uses dynamic import)
  */
-function createWithdrawalPayload(
+async function createWithdrawalPayload(
     userAddress: string,
-    amount: BN,
+    amountBigInt: bigint,
     withdrawalId: Uint8Array,
     expiry: number
-): Uint8Array {
+): Promise<Uint8Array> {
+    const { stringToU8a, hexToU8a, u8aToHex, u8aConcat, bnToU8a, isHex } = await import('@polkadot/util')
+    const { decodeAddress } = await import('@polkadot/util-crypto')
+    const { BN } = await import('@polkadot/util')
+
     // 1. Domain separator
-    const domain = WITHDRAWAL_DOMAIN
+    const domain = stringToU8a(WITHDRAWAL_DOMAIN_STRING)
 
     // 2. User address (32 bytes) - convert from SS58 or hex to raw bytes
     let addressBytes: Uint8Array
@@ -103,6 +107,7 @@ function createWithdrawalPayload(
     })
 
     // 3. Amount as big-endian 32 bytes
+    const amount = new BN(amountBigInt.toString())
     const amountBytes = bnToU8a(amount, { bitLength: 256, isLe: false })
 
     // 4. Withdrawal ID (32 bytes)
@@ -158,6 +163,10 @@ export const withdrawalService = {
         }
 
         try {
+            // Dynamic imports for polkadot packages
+            const { u8aToHex } = await import('@polkadot/util')
+            const { blake2AsU8a, sr25519Sign } = await import('@polkadot/util-crypto')
+
             // Get backend keypair
             const keypair = await getBackendKeypair()
 
@@ -168,10 +177,10 @@ export const withdrawalService = {
             // Set expiry
             const expiry = Date.now() + (WITHDRAWAL_EXPIRY_MINUTES * 60 * 1000)
 
-            // Convert amount to raw (with decimals)
-            const multiplier = new BN(10).pow(new BN(LINE_DECIMALS))
-            const amountBN = new BN(amount).mul(multiplier)
-            const amountRaw = amountBN.toString()
+            // Convert amount to raw (with decimals) using BigInt
+            const multiplier = 10n ** BigInt(LINE_DECIMALS)
+            const amountBigInt = BigInt(amount) * multiplier
+            const amountRaw = amountBigInt.toString()
 
             console.log('[Withdrawal API] Signing parameters:', {
                 walletAddress: wallet.address,
@@ -182,10 +191,10 @@ export const withdrawalService = {
                 expiryDate: new Date(expiry).toISOString()
             })
 
-            // Create payload
-            const payload = createWithdrawalPayload(
+            // Create payload (now async)
+            const payload = await createWithdrawalPayload(
                 wallet.address,
-                amountBN,
+                amountBigInt,
                 withdrawalIdBytes,
                 expiry
             )

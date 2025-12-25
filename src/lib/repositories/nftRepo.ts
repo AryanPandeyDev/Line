@@ -19,13 +19,14 @@
  */
 
 import { db } from '@/lib/db'
+import type { TokenType } from '@/lib/generated/prisma'
 
 export interface NFTWithListing {
     id: string
     name: string
     creatorName: string
     image: string
-    currentPrice: number
+    currentPrice: number | null
     likes: number
     rarity: string
     description: string | null
@@ -120,7 +121,7 @@ export const nftRepo = {
         nftId: string
         bidderId: string
         amount: number
-        tokenType: string
+        tokenType: TokenType
     }) => {
         return db.nFTBid.create({
             data: {

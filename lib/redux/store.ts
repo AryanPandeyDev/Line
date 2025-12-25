@@ -7,6 +7,7 @@ import nftsReducer from "./slices/nfts-slice"
 import walletReducer from "./slices/wallet-slice"
 import tasksReducer from "./slices/tasks-slice"
 import referralReducer from "./slices/referral-slice"
+import auctionsReducer from "./slices/auctions-slice"
 
 export const store = configureStore({
   reducer: {
@@ -18,6 +19,7 @@ export const store = configureStore({
     wallet: walletReducer,
     tasks: tasksReducer,
     referrals: referralReducer,
+    auctions: auctionsReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

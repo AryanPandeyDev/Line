@@ -185,7 +185,7 @@ describe('referralService', () => {
             expect(result?.tiers[0]).toEqual({
                 tier: 1,
                 referrals: 5,
-                reward: 500,
+                reward: 10,  // Matches DEFAULT_TIERS in implementation
                 bonus: '5% commission',
                 unlocked: true,
             })

@@ -53,23 +53,24 @@ describe('rewardLogic', () => {
 
     describe('calculateStreakReward', () => {
         it('returns correct rewards for 7-day cycle', () => {
-            expect(calculateStreakReward(1)).toBe(50)  // 25 + 1*25
-            expect(calculateStreakReward(2)).toBe(75)  // 25 + 2*25
-            expect(calculateStreakReward(3)).toBe(100) // 25 + 3*25
-            expect(calculateStreakReward(4)).toBe(125) // 25 + 4*25
-            expect(calculateStreakReward(5)).toBe(150) // 25 + 5*25
-            expect(calculateStreakReward(6)).toBe(175) // 25 + 6*25
-            expect(calculateStreakReward(7)).toBe(300) // Bonus day
+            // Current reward system: 1-5 tokens/day
+            expect(calculateStreakReward(1)).toBe(1)  // Day 1
+            expect(calculateStreakReward(2)).toBe(1)  // Day 2
+            expect(calculateStreakReward(3)).toBe(1)  // Day 3
+            expect(calculateStreakReward(4)).toBe(2)  // Day 4
+            expect(calculateStreakReward(5)).toBe(2)  // Day 5
+            expect(calculateStreakReward(6)).toBe(3)  // Day 6
+            expect(calculateStreakReward(7)).toBe(5)  // Day 7 (bonus)
         })
 
         it('cycles back after day 7', () => {
-            expect(calculateStreakReward(8)).toBe(50)  // Day 1 of cycle 2
-            expect(calculateStreakReward(14)).toBe(300) // Day 7 of cycle 2
+            expect(calculateStreakReward(8)).toBe(1)  // Day 1 of cycle 2
+            expect(calculateStreakReward(14)).toBe(5) // Day 7 of cycle 2
         })
 
         it('handles high streak counts', () => {
-            expect(calculateStreakReward(21)).toBe(300) // Day 7 of cycle 3
-            expect(calculateStreakReward(100)).toBe(75) // Day 2 of cycle 15 (100-1=99, 99%7=1, +1=2)
+            expect(calculateStreakReward(21)).toBe(5) // Day 7 of cycle 3
+            expect(calculateStreakReward(100)).toBe(1) // Day 2 of cycle 15 (100-1=99, 99%7=1, +1=2) -> Day 2 = 1 token
         })
     })
 

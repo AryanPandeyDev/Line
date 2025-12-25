@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     try {
         // Dynamic import to avoid bundler issues
         const { GearApi } = await import("@gear-js/api");
-        const { encodeAddress } = await import("@gear-js/api");
+        const { encodeAddress } = await import("@polkadot/util-crypto");
 
         console.log("[Wallet State API] Connecting to Vara testnet:", VARA_RPC);
         const api = await GearApi.create({ providerAddress: VARA_RPC });

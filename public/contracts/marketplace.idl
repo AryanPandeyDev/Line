@@ -1,0 +1,144 @@
+/// Single auction state
+type Auction = struct {
+  /// NFT contract address
+  nft_program_id: actor_id,
+  /// NFT token ID
+  token_id: u64,
+  /// Original seller (receives proceeds) - always admin in MVP
+  seller: actor_id,
+  /// Minimum first bid
+  start_price: u256,
+  /// Current highest bid (0 if no bids)
+  highest_bid: u256,
+  /// Current winning bidder
+  highest_bidder: opt actor_id,
+  /// Auction end timestamp (milliseconds since epoch)
+  end_time_ms: u64,
+  /// True after finalization complete
+  settled: bool,
+  /// Anti-snipe extension window (milliseconds)
+  extension_window_ms: u64,
+  /// Minimum increment over previous bid
+  min_bid_increment: u256,
+};
+
+constructor {
+  /// Initialize the marketplace with LINE token contract address
+  /// 
+  /// # Arguments
+  /// * `line_program_id` - The ActorId of the deployed LINE token contract
+  New : (line_program_id: actor_id);
+};
+
+service Marketplace {
+  /// Add a new admin
+  AddAdmin : (admin: actor_id) -> bool;
+  /// Place a bid on an auction
+  /// 
+  /// Funds are pulled from bidder via LINE.transfer_from
+  Bid : (auction_id: u64, bid_amount: u256) -> bool;
+  /// Cancel an auction before it ends
+  CancelAuction : (auction_id: u64) -> bool;
+  /// Claim pending NFT transfer (for winner or seller when transfer failed)
+  ClaimNft : (auction_id: u64) -> bool;
+  /// Claim pending payout (for seller or finalizer when transfer failed)
+  ClaimPayout : () -> bool;
+  /// Claim pending refund for outbid user
+  ClaimRefund : () -> bool;
+  /// Create a new auction for an NFT
+  /// 
+  /// NFT is escrowed to marketplace via cross-contract call
+  CreateAuction : (nft_program_id: actor_id, token_id: u64, start_price: u256, duration_ms: u64, extension_window_ms: u64, min_bid_increment: u256) -> u64;
+  /// Finalize an auction after it ends
+  /// Permissionless - anyone can call this
+  FinalizeAuction : (auction_id: u64) -> bool;
+  /// Remove an admin
+  RemoveAdmin : (admin: actor_id) -> bool;
+  /// Set the finalizer reward in basis points
+  SetFinalizerRewardBps : (bps: u32) -> bool;
+  query Admins : () -> vec actor_id;
+  query FinalizerRewardBps : () -> u32;
+  query GetAuction : (auction_id: u64) -> opt Auction;
+  query GetPendingNft : (auction_id: u64) -> opt struct { actor_id, u64, actor_id };
+  query GetPendingPayout : (user: actor_id) -> u256;
+  query GetPendingRefund : (user: actor_id) -> u256;
+  query IsAdmin : (account: actor_id) -> bool;
+  query LineProgramId : () -> actor_id;
+  query NextAuctionId : () -> u64;
+
+  events {
+    /// Auction created
+    AuctionCreated: struct {
+      auction_id: u64,
+      nft_program_id: actor_id,
+      token_id: u64,
+      seller: actor_id,
+      start_price: u256,
+      end_time_ms: u64,
+    };
+    /// Auction cancelled
+    AuctionCancelled: struct {
+      auction_id: u64
+    };
+    /// New bid placed
+    BidPlaced: struct {
+      auction_id: u64,
+      bidder: actor_id,
+      amount: u256,
+      new_end_time_ms: u64,
+    };
+    /// Auction finalized
+    AuctionFinalized: struct {
+      auction_id: u64,
+      winner: opt actor_id,
+      winning_bid: u256,
+      seller_payout: u256,
+      finalizer_reward: u256,
+    };
+    /// Refund queued for outbid user
+    RefundQueued: struct {
+      user: actor_id,
+      amount: u256,
+    };
+    /// Refund claimed
+    RefundClaimed: struct {
+      user: actor_id,
+      amount: u256,
+    };
+    /// Payout queued (transfer failed)
+    PayoutQueued: struct {
+      recipient: actor_id,
+      amount: u256,
+    };
+    /// Payout claimed
+    PayoutClaimed: struct {
+      recipient: actor_id,
+      amount: u256,
+    };
+    /// NFT transfer failed, queued for retry
+    NftTransferQueued: struct {
+      auction_id: u64,
+      recipient: actor_id,
+      token_id: u64,
+    };
+    /// NFT transfer completed via claim
+    NftTransferClaimed: struct {
+      auction_id: u64,
+      recipient: actor_id,
+      token_id: u64,
+    };
+    /// Admin added
+    AdminAdded: struct {
+      admin: actor_id
+    };
+    /// Admin removed
+    AdminRemoved: struct {
+      admin: actor_id
+    };
+    /// Finalizer reward updated
+    FinalizerRewardUpdated: struct {
+      bps: u32
+    };
+  }
+};
+
