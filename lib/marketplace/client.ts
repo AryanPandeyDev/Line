@@ -190,6 +190,81 @@ async function createLineTokenSails() {
 
 export const lineTokenClient = {
     /**
+     * Query current allowance for a spender
+     * This is a read-only query, no signature needed
+     *
+     * @param owner - Owner's wallet address (SS58 or hex format)
+     * @param spender - Spender's contract address (hex format)
+     * @returns Current allowance as bigint
+     */
+    async getAllowance(
+        owner: string,
+        spender: string
+    ): Promise<bigint> {
+        console.log('[LineTokenClient] Querying allowance:', { owner, spender })
+
+        const { api, sails } = await createLineTokenSails()
+
+        try {
+            // Convert owner address to hex if it's SS58 encoded
+            const { decodeAddress } = await import('@polkadot/util-crypto')
+            const { u8aToHex } = await import('@polkadot/util')
+
+            let ownerHex = owner
+            if (!owner.startsWith('0x')) {
+                try {
+                    ownerHex = u8aToHex(decodeAddress(owner))
+                } catch {
+                    console.error('[LineTokenClient] Failed to decode owner address:', owner)
+                    return 0n
+                }
+            }
+
+            console.log('[LineTokenClient] Using owner hex:', ownerHex)
+
+            // LINE token Allowance query: Allowance(owner: actor_id, spender: actor_id) -> u256
+            // Sails queries return a QueryBuilder - must call .call() to execute
+            const queryBuilder = sails.services.Line.queries.Allowance(
+                ownerHex as `0x${string}`,
+                spender as `0x${string}`
+            )
+
+            // Execute the query with origin address
+            const result = await queryBuilder
+                .withAddress(ownerHex as `0x${string}`)
+                .call()
+
+            console.log('[LineTokenClient] Raw allowance result:', result, typeof result)
+
+            // Extract the actual value - result should be the u256 value
+            let allowanceValue: bigint = 0n
+            if (result !== null && result !== undefined) {
+                if (typeof result === 'bigint') {
+                    allowanceValue = result
+                } else if (typeof result === 'string' || typeof result === 'number') {
+                    allowanceValue = BigInt(result)
+                } else if (typeof result === 'object') {
+                    // Could be wrapped in an object or array - cast through unknown first
+                    const resultObj = result as unknown as Record<string, unknown>
+                    const val = resultObj.value ?? resultObj.ok ??
+                        (Array.isArray(result) ? result[0] : result)
+                    if (val !== null && val !== undefined && typeof val !== 'object') {
+                        allowanceValue = BigInt(String(val))
+                    }
+                }
+            }
+
+            console.log('[LineTokenClient] Parsed allowance:', allowanceValue.toString())
+            return allowanceValue
+        } catch (error) {
+            console.error('[LineTokenClient] Allowance query error:', error)
+            return 0n
+        } finally {
+            await api.disconnect()
+        }
+    },
+
+    /**
      * Approve marketplace to spend LINE tokens
      * This must complete before placing a bid
      *

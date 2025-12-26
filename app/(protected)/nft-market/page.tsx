@@ -78,6 +78,9 @@ export default function NFTMarketPage() {
   // User's on-chain LINE balance for bid validation
   const [lineBalance, setLineBalance] = useState<bigint>(0n)
 
+  // User's current LINE allowance for marketplace
+  const [lineAllowance, setLineAllowance] = useState<bigint>(0n)
+
   // Marketplace actions hook for signing transactions
   const {
     finalizeAuction,
@@ -85,6 +88,7 @@ export default function NFTMarketPage() {
     approveLineForMarketplace,
     claimRefund,
     claimPayout,
+    checkAllowance,
     state: actionState,
     reset: resetActionState
   } = useMarketplaceActions(walletAddress, () => {
@@ -125,6 +129,7 @@ export default function NFTMarketPage() {
       setPendingRefund(0n)
       setPendingPayout(0n)
       setLineBalance(0n)
+      setLineAllowance(0n)
       return
     }
 
@@ -155,11 +160,19 @@ export default function NFTMarketPage() {
           setLineBalance(BigInt(data.lineRaw))
         }
       }
+
+      // Fetch current allowance for marketplace
+      try {
+        const allowance = await checkAllowance()
+        setLineAllowance(allowance)
+      } catch (err) {
+        console.error('Failed to fetch allowance:', err)
+      }
     } catch (err) {
       console.error('Failed to fetch pending items:', err)
       // Keep existing values on error
     }
-  }, [walletAddress])
+  }, [walletAddress, checkAllowance])
 
   // Initial fetch
   useEffect(() => {
@@ -454,6 +467,7 @@ export default function NFTMarketPage() {
           }}
           walletAddress={walletAddress}
           lineBalance={lineBalance}
+          lineAllowance={lineAllowance}
           onFinalizeAuction={async (auctionId: string) => {
             const success = await finalizeAuction(auctionId)
             if (success) {
@@ -470,6 +484,11 @@ export default function NFTMarketPage() {
           }}
           onApprove={async (amount: bigint) => {
             const success = await approveLineForMarketplace(amount)
+            if (success) {
+              // Refresh allowance after successful approval
+              const newAllowance = await checkAllowance()
+              setLineAllowance(newAllowance)
+            }
             return success
           }}
         />

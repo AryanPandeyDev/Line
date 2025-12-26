@@ -24,6 +24,7 @@
 
 import { useCallback, useState } from 'react'
 import { marketplaceClient, lineTokenClient, isSubWalletAvailable, TransactionResult } from '@/lib/marketplace/client'
+import { CONTRACTS } from '@/lib/contracts/config'
 
 // ============================================================================
 // TYPES
@@ -48,6 +49,9 @@ export interface UseMarketplaceActionsResult {
     approveLineForMarketplace: (amount: bigint) => Promise<boolean>
     claimRefund: () => Promise<boolean>
     claimPayout: () => Promise<boolean>
+
+    // Queries
+    checkAllowance: () => Promise<bigint>
 
     // Utilities
     reset: () => void
@@ -223,6 +227,29 @@ export function useMarketplaceActions(
         [executeAction, walletAddress]
     )
 
+    // ========================================================================
+    // QUERIES
+    // ========================================================================
+
+    const checkAllowance = useCallback(
+        async (): Promise<bigint> => {
+            if (!walletAddress || !CONTRACTS.MARKETPLACE) {
+                return 0n
+            }
+
+            try {
+                return await lineTokenClient.getAllowance(
+                    walletAddress,
+                    CONTRACTS.MARKETPLACE
+                )
+            } catch (error) {
+                console.error('[useMarketplaceActions] checkAllowance error:', error)
+                return 0n
+            }
+        },
+        [walletAddress]
+    )
+
     return {
         state,
         isWalletAvailable: isSubWalletAvailable(),
@@ -231,6 +258,7 @@ export function useMarketplaceActions(
         approveLineForMarketplace,
         claimRefund,
         claimPayout,
+        checkAllowance,
         reset,
     }
 }
