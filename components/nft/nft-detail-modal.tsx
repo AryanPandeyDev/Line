@@ -1,6 +1,6 @@
 "use client"
 
-import { X, Heart, Share2, ExternalLink, Clock, User, Tag, TrendingUp, Loader2, AlertTriangle } from "lucide-react"
+import { X, Heart, Share2, ExternalLink, Clock, User, Tag, TrendingUp, Loader2, AlertTriangle, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -64,7 +64,7 @@ interface NFTDetailModalProps {
   walletAddress?: string | null
   lineBalance?: bigint
   lineAllowance?: bigint
-  onPlaceBid?: (auctionId: string, amount: bigint) => Promise<boolean>
+  onPlaceBid?: (auctionId: string, amount: bigint) => Promise<{ success: boolean; error?: string }>
   onApprove?: (amount: bigint) => Promise<boolean>
   onFinalizeAuction?: (auctionId: string) => Promise<boolean>
 }
@@ -142,6 +142,7 @@ export function NFTDetailModal({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isFinalizing, setIsFinalizing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [bidSuccess, setBidSuccess] = useState<{ amount: bigint } | null>(null)
   const [showApprovalModal, setShowApprovalModal] = useState(false)
   const [approvalStatus, setApprovalStatus] = useState<ApprovalStatus>("idle")
 
@@ -235,11 +236,16 @@ export function NFTDetailModal({
     setError(null)
 
     try {
-      const success = await onPlaceBid(nft.id, amount)
-      if (success) {
-        onClose()
+      const result = await onPlaceBid(nft.id, amount)
+      if (result.success) {
+        // Show success message before closing
+        setBidSuccess({ amount })
+        // Auto-close after 2.5 seconds
+        setTimeout(() => {
+          onClose()
+        }, 2500)
       } else {
-        setError("Bid failed. Please try again.")
+        setError(result.error || "Bid failed. Please try again.")
       }
     } catch (e) {
       console.error("Bid error:", e)
@@ -537,6 +543,27 @@ export function NFTDetailModal({
           </div>
         </div>
       </div>
+
+      {/* Bid Success Overlay */}
+      {bidSuccess && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/90 backdrop-blur-sm rounded-2xl">
+          <div className="text-center p-8 animate-in fade-in zoom-in duration-300">
+            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-green-500/20 flex items-center justify-center">
+              <CheckCircle2 className="w-12 h-12 text-green-500 animate-in zoom-in duration-500" />
+            </div>
+            <h3 className="text-2xl font-bold text-white mb-2">Bid Placed Successfully!</h3>
+            <p className="text-lg text-green-400 font-semibold mb-2">
+              {formatLine(bidSuccess.amount)} LINE
+            </p>
+            <p className="text-muted-foreground mb-4">
+              on {nft.name}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Closing automatically...
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Approval Modal */}
       <ApprovalModal

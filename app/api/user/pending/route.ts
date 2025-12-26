@@ -35,6 +35,26 @@ export async function GET(request: NextRequest) {
             )
         }
 
+        // Convert SS58 to hex if needed (contract requires hex format)
+        let addressHex = address
+        const isHexAddress = /^0x[a-fA-F0-9]{64}$/.test(address)
+
+        if (!isHexAddress) {
+            try {
+                const { decodeAddress } = await import('@polkadot/util-crypto')
+                const { u8aToHex } = await import('@polkadot/util')
+                const publicKey = decodeAddress(address)
+                addressHex = u8aToHex(publicKey)
+                console.log('[/api/user/pending] Converted SS58 to hex:', addressHex)
+            } catch (err) {
+                console.error('[/api/user/pending] Failed to decode SS58 address:', err)
+                return NextResponse.json(
+                    { success: false, error: 'Invalid address format' },
+                    { status: 400 }
+                )
+            }
+        }
+
         // Check if contract is configured
         if (!marketplaceService.isConfigured()) {
             return NextResponse.json({
@@ -46,10 +66,10 @@ export async function GET(request: NextRequest) {
             })
         }
 
-        // Query contract
+        // Query contract with hex address
         const amount = type === 'refund'
-            ? await marketplaceService.getPendingRefund(address)
-            : await marketplaceService.getPendingPayout(address)
+            ? await marketplaceService.getPendingRefund(addressHex)
+            : await marketplaceService.getPendingPayout(addressHex)
 
         return NextResponse.json({
             success: true,

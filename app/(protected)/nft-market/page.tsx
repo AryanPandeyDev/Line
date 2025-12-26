@@ -476,11 +476,9 @@ export default function NFTMarketPage() {
             return success
           }}
           onPlaceBid={async (auctionId: string, amount: bigint) => {
-            const success = await placeBid(auctionId, amount)
-            if (success) {
-              setSelectedAuction(null)
-            }
-            return success
+            const result = await placeBid(auctionId, amount)
+            // Don't close modal here - let the modal show success message and close after delay
+            return result
           }}
           onApprove={async (amount: bigint) => {
             const success = await approveLineForMarketplace(amount)

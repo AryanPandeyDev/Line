@@ -501,7 +501,32 @@ export const marketplaceClient = {
             )
 
             transaction.withAccount(account.address, { signer: extension.signer })
-            await transaction.calculateGas()
+
+            try {
+                await transaction.calculateGas()
+            } catch (gasError) {
+                // Parse contract error messages for user-friendly display
+                const errorStr = String(gasError)
+                console.log('[MarketplaceClient] Gas calculation error:', errorStr)
+
+                if (errorStr.includes('Cannot outbid yourself')) {
+                    throw new Error('You are already the highest bidder. You cannot outbid yourself.')
+                }
+                if (errorStr.includes('Auction ended') || errorStr.includes('auction has ended')) {
+                    throw new Error('This auction has ended. You can no longer place bids.')
+                }
+                if (errorStr.includes('Insufficient allowance')) {
+                    throw new Error('Insufficient LINE token allowance. Please approve more tokens.')
+                }
+                if (errorStr.includes('Bid too low') || errorStr.includes('bid is too low')) {
+                    throw new Error('Your bid is too low. Please enter a higher amount.')
+                }
+                if (errorStr.includes('Insufficient balance')) {
+                    throw new Error('Insufficient LINE token balance for this bid.')
+                }
+                // Re-throw original error if not matched
+                throw gasError
+            }
 
             console.log('[MarketplaceClient] Requesting bid signature...')
             const result = await transaction.signAndSend()

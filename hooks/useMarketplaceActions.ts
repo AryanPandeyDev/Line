@@ -45,7 +45,7 @@ export interface UseMarketplaceActionsResult {
 
     // Actions
     finalizeAuction: (auctionId: string) => Promise<boolean>
-    placeBid: (auctionId: string, amount: bigint) => Promise<boolean>
+    placeBid: (auctionId: string, amount: bigint) => Promise<{ success: boolean; error?: string }>
     approveLineForMarketplace: (amount: bigint) => Promise<boolean>
     claimRefund: () => Promise<boolean>
     claimPayout: () => Promise<boolean>
@@ -182,22 +182,71 @@ export function useMarketplaceActions(
     )
 
     const placeBid = useCallback(
-        async (auctionId: string, amount: bigint): Promise<boolean> => {
+        async (auctionId: string, amount: bigint): Promise<{ success: boolean; error?: string }> => {
             // Validate amount
             if (amount <= 0n) {
+                const errorMsg = 'Bid amount must be greater than 0'
                 setState({
                     status: 'error',
-                    error: 'Bid amount must be greater than 0',
+                    error: errorMsg,
                     txHash: null,
                 })
-                return false
+                return { success: false, error: errorMsg }
             }
 
-            return executeAction('Bid', () =>
-                marketplaceClient.placeBid(auctionId, amount, walletAddress!)
-            )
+            // Pre-flight checks
+            if (!walletAddress) {
+                return { success: false, error: 'Please connect your wallet first' }
+            }
+
+            if (!isSubWalletAvailable()) {
+                return { success: false, error: 'SubWallet not found. Please install the SubWallet browser extension.' }
+            }
+
+            // Start transaction
+            setState({
+                status: 'signing',
+                error: null,
+                txHash: null,
+            })
+
+            try {
+                const result = await marketplaceClient.placeBid(auctionId, amount, walletAddress)
+
+                if (result.success) {
+                    setState({
+                        status: 'success',
+                        error: null,
+                        txHash: result.blockHash || result.txHash || null,
+                    })
+                    onSuccess?.()
+                    return { success: true }
+                } else {
+                    const errorMsg = result.error || 'Bid failed'
+                    setState({
+                        status: 'error',
+                        error: errorMsg,
+                        txHash: null,
+                    })
+                    return { success: false, error: errorMsg }
+                }
+            } catch (error) {
+                let errorMessage = 'Transaction failed'
+                if (error instanceof Error) {
+                    errorMessage = error.message
+                    if (errorMessage.includes('Cancelled') || errorMessage.includes('Rejected')) {
+                        errorMessage = 'Transaction cancelled by user'
+                    }
+                }
+                setState({
+                    status: 'error',
+                    error: errorMessage,
+                    txHash: null,
+                })
+                return { success: false, error: errorMessage }
+            }
         },
-        [executeAction, walletAddress]
+        [walletAddress, onSuccess]
     )
 
     const claimRefund = useCallback(

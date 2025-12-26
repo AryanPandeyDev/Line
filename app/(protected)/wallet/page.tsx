@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Wallet, ArrowUpRight, ArrowDownLeft, Copy, ExternalLink, AlertCircle, Loader2 } from "lucide-react"
+import { useState, useEffect, useCallback } from "react"
+import { Wallet, ArrowUpRight, ArrowDownLeft, Copy, ExternalLink, AlertCircle, Loader2, Gift, Coins } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -13,6 +13,8 @@ import {
   fetchWalletState,
 } from "@/lib/redux/slices/wallet-slice"
 import { openModal } from "@/lib/redux/slices/ui-slice"
+import { useMarketplaceActions } from "@/hooks/useMarketplaceActions"
+import { formatLine } from "@/lib/contracts/decimals"
 
 export default function WalletPage() {
   const dispatch = useAppDispatch()
@@ -22,7 +24,67 @@ export default function WalletPage() {
 
   const [activeTab, setActiveTab] = useState<"tokens" | "history">("tokens")
 
-  // Fetch wallet state when connected - use either addressRaw or address
+  // Pending refunds/payouts state
+  const [pendingRefund, setPendingRefund] = useState<bigint>(0n)
+  const [pendingPayout, setPendingPayout] = useState<bigint>(0n)
+  const [isClaimingRefund, setIsClaimingRefund] = useState(false)
+  const [isClaimingPayout, setIsClaimingPayout] = useState(false)
+  const [claimError, setClaimError] = useState<string | null>(null)
+  const [claimSuccess, setClaimSuccess] = useState<string | null>(null)
+
+  // Get wallet address for marketplace actions
+  const walletAddress = wallet.addressRaw || wallet.address || null
+
+  // Marketplace actions for claiming
+  const { claimRefund, claimPayout } = useMarketplaceActions(walletAddress, () => {
+    // Refresh pending amounts after successful claim
+    fetchPendingAmounts()
+    // Refresh wallet balance
+    if (walletAddress) {
+      dispatch(fetchWalletState(walletAddress))
+    }
+  })
+
+  // Fetch pending refund/payout amounts
+  const fetchPendingAmounts = useCallback(async () => {
+    if (!walletAddress) {
+      setPendingRefund(0n)
+      setPendingPayout(0n)
+      return
+    }
+
+    console.log('[WalletPage] Fetching pending amounts for:', walletAddress)
+
+    try {
+      // Fetch refund
+      const refundRes = await fetch(`/api/user/pending?type=refund&address=${walletAddress}`)
+      if (refundRes.ok) {
+        const data = await refundRes.json()
+        console.log('[WalletPage] Refund response:', data)
+        if (data.success) {
+          const refundAmount = BigInt(data.amount || '0')
+          console.log('[WalletPage] Pending refund:', refundAmount.toString())
+          setPendingRefund(refundAmount)
+        }
+      }
+
+      // Fetch payout
+      const payoutRes = await fetch(`/api/user/pending?type=payout&address=${walletAddress}`)
+      if (payoutRes.ok) {
+        const data = await payoutRes.json()
+        console.log('[WalletPage] Payout response:', data)
+        if (data.success) {
+          const payoutAmount = BigInt(data.amount || '0')
+          console.log('[WalletPage] Pending payout:', payoutAmount.toString())
+          setPendingPayout(payoutAmount)
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch pending amounts:', err)
+    }
+  }, [walletAddress])
+
+  // Fetch wallet state when connected
   useEffect(() => {
     if (isConnected) {
       const address = wallet.addressRaw || wallet.address
@@ -31,6 +93,55 @@ export default function WalletPage() {
       }
     }
   }, [isConnected, wallet.addressRaw, wallet.address, dispatch])
+
+  // Fetch pending amounts when wallet changes
+  useEffect(() => {
+    if (isConnected && walletAddress) {
+      fetchPendingAmounts()
+    }
+  }, [isConnected, walletAddress, fetchPendingAmounts])
+
+  // Handle claim refund
+  const handleClaimRefund = async () => {
+    setClaimError(null)
+    setClaimSuccess(null)
+    setIsClaimingRefund(true)
+
+    try {
+      const success = await claimRefund()
+      if (success) {
+        setClaimSuccess('Refund claimed successfully!')
+        setTimeout(() => setClaimSuccess(null), 3000)
+      } else {
+        setClaimError('Failed to claim refund')
+      }
+    } catch (e) {
+      setClaimError(e instanceof Error ? e.message : 'Claim failed')
+    } finally {
+      setIsClaimingRefund(false)
+    }
+  }
+
+  // Handle claim payout
+  const handleClaimPayout = async () => {
+    setClaimError(null)
+    setClaimSuccess(null)
+    setIsClaimingPayout(true)
+
+    try {
+      const success = await claimPayout()
+      if (success) {
+        setClaimSuccess('Payout claimed successfully!')
+        setTimeout(() => setClaimSuccess(null), 3000)
+      } else {
+        setClaimError('Failed to claim payout')
+      }
+    } catch (e) {
+      setClaimError(e instanceof Error ? e.message : 'Claim failed')
+    } finally {
+      setIsClaimingPayout(false)
+    }
+  }
 
   // Build tokens array with real on-chain balances
   const tokens = [
@@ -156,6 +267,102 @@ export default function WalletPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Pending Refunds/Payouts Section */}
+      {(pendingRefund > 0n || pendingPayout > 0n) && (
+        <div className="mb-8 space-y-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Gift className="w-5 h-5 text-primary" />
+            Pending Claims
+          </h2>
+
+          {/* Success/Error Messages */}
+          {claimSuccess && (
+            <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 text-sm">
+              {claimSuccess}
+            </div>
+          )}
+          {claimError && (
+            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+              {claimError}
+            </div>
+          )}
+
+          <div className="grid md:grid-cols-2 gap-4">
+            {/* Pending Refund Card */}
+            {pendingRefund > 0n && (
+              <Card className="bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border-blue-500/30">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
+                        <ArrowDownLeft className="w-5 h-5 text-blue-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Refund Available</p>
+                        <p className="text-xl font-bold text-blue-400">
+                          {formatLine(pendingRefund)} LINE
+                        </p>
+                        <p className="text-xs text-muted-foreground">From outbid auctions</p>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={handleClaimRefund}
+                      disabled={isClaimingRefund}
+                      className="bg-blue-500 hover:bg-blue-600"
+                    >
+                      {isClaimingRefund ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Claiming...
+                        </>
+                      ) : (
+                        'Claim'
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Pending Payout Card */}
+            {pendingPayout > 0n && (
+              <Card className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 border-green-500/30">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+                        <Coins className="w-5 h-5 text-green-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Payout Available</p>
+                        <p className="text-xl font-bold text-green-400">
+                          {formatLine(pendingPayout)} LINE
+                        </p>
+                        <p className="text-xs text-muted-foreground">From auction sales</p>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={handleClaimPayout}
+                      disabled={isClaimingPayout}
+                      className="bg-green-500 hover:bg-green-600"
+                    >
+                      {isClaimingPayout ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Claiming...
+                        </>
+                      ) : (
+                        'Claim'
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Loading indicator */}
       {wallet.loadingWallet && (
